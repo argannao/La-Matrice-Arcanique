@@ -212,5 +212,57 @@ footer.pied { text-align: center; color: var(--texte-faible); font-size: 0.85rem
 
 @media (max-width: 600px) {
   .barre { flex-wrap: wrap; flex-direction: row; }
-  .barre nav { order: 3; width: 100%; justify-content: flex-start; }
+  .barre nav { order: 3; flex: 1 1 100%; width: 100%; justify-content: flex-start; }
 }
+
+/* --- Menus natifs restants : flèche personnalisée --- */
+select {
+  appearance: none; -webkit-appearance: none; cursor: pointer;
+  padding-right: 2.2rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%2362d6c6' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 0.75rem center;
+}
+select:hover { border-color: var(--ligne-forte); }
+select option { background: var(--surface); color: var(--texte); }
+
+/* --- Sélecteurs visuels --- */
+.choix-bouton {
+  width: 100%; display: flex; align-items: center; gap: 0.65rem; text-align: left;
+  background: var(--bg-2); color: var(--texte); border: 1px solid var(--ligne); border-radius: 8px;
+  padding: 0.45rem 0.6rem; font: inherit; cursor: pointer; min-height: 2.75rem;
+  transition: border-color .15s, background-color .15s;
+}
+.choix-bouton:hover { border-color: var(--ligne-forte); background: #151827; }
+.choix-bouton:focus-visible { outline: 2px solid var(--arcane-sombre); border-color: var(--arcane); }
+.choix-bouton[aria-expanded="true"] { border-color: var(--c, var(--arcane)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c, var(--arcane)) 18%, transparent); }
+.choix-ico {
+  flex-shrink: 0; width: 2rem; height: 2rem; border-radius: 7px; display: grid; place-items: center; font-size: 1.05rem; line-height: 1;
+  background: color-mix(in srgb, var(--c, var(--arcane)) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c, var(--arcane)) 35%, transparent);
+}
+.choix-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
+.choix-nom { font-size: 0.93rem; line-height: 1.25; }
+.choix-tags { font-family: var(--mono); font-size: 0.7rem; color: var(--c, var(--arcane)); opacity: 0.9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.choix-chevron { flex-shrink: 0; color: var(--texte-faible); display: grid; place-items: center; transition: transform .15s; }
+.choix-bouton[aria-expanded="true"] .choix-chevron { transform: rotate(180deg); color: var(--c, var(--arcane)); }
+
+.choix-panneau {
+  position: fixed; z-index: 60; overflow-y: auto; overscroll-behavior: contain;
+  background: var(--surface); border: 1px solid var(--ligne-forte); border-radius: 11px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(0, 0, 0, 0.2);
+  padding: 0.6rem; animation: choix-in .12s ease-out;
+}
+@keyframes choix-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.choix-titre { font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--texte-faible); padding: 0.15rem 0.3rem 0.5rem; }
+.choix-grille { display: grid; grid-template-columns: 1fr; gap: 0.35rem; }
+.choix-panneau.large .choix-grille { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.choix-option {
+  display: flex; align-items: flex-start; gap: 0.6rem; text-align: left; width: 100%;
+  background: var(--bg-2); color: var(--texte); border: 1px solid var(--ligne); border-radius: 8px;
+  padding: 0.55rem 0.6rem; font: inherit; cursor: pointer; transition: border-color .12s, background-color .12s;
+}
+.choix-option:hover, .choix-option:focus-visible { outline: none; border-color: color-mix(in srgb, var(--c, var(--arcane)) 60%, transparent); background: #171b2b; }
+.choix-option[aria-selected="true"] { border-color: var(--c, var(--arcane)); background: color-mix(in srgb, var(--c, var(--arcane)) 10%, var(--bg-2)); }
+.choix-option[aria-selected="true"] .choix-nom::after { content: ' ✓'; color: var(--c, var(--arcane)); }
+.choix-option .choix-tags { white-space: normal; }
+.choix-note { font-size: 0.78rem; color: var(--texte-doux); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin-top: 0.15rem; }

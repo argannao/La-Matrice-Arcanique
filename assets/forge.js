@@ -29,11 +29,14 @@
   // --- Plan (blocs) -----------------------------------------------------------------
   const NATURE = { rigoureux: 'physique réelle', mixte: 'physique + inspiration', inspire: 'loi inventée' };
 
-  function champHTML(prm, valeur, i) {
+  const cleChoix = (bloc, prm) => (bloc.type === 'effet' && prm.id !== 'effet' ? `${bloc.params?.effet || 'lumiere'}.${prm.id}` : `${bloc.type}.${prm.id}`);
+
+  function champHTML(prm, valeur, i, bloc) {
     const id = `b${i}-${prm.id}`;
     if (prm.type === 'select') {
-      const o = Object.entries(prm.options).map(([k, t]) => `<option value="${echapper(k)}"${String(valeur) === k ? ' selected' : ''}>${echapper(t)}</option>`).join('');
-      return `<div class="champ"><label for="${id}">${echapper(prm.label)}</label><select id="${id}" data-i="${i}" data-p="${prm.id}">${o}</select></div>`;
+      const large = Object.keys(prm.options).length > 6 ? ' champ-large' : '';
+      return `<div class="champ${large}"><label for="${id}">${echapper(prm.label)}</label>${
+        Choix.boutonHTML({ id, cle: cleChoix(bloc, prm), prm, valeur, data: `data-i="${i}" data-p="${prm.id}"` })}</div>`;
     }
     const input = `<input id="${id}" type="number" ${prm.min !== undefined ? `min="${prm.min}"` : ''} step="${prm.step ?? 1}" value="${echapper(valeur)}" data-i="${i}" data-p="${prm.id}">`;
     return `<div class="champ"><label for="${id}">${echapper(prm.label)}</label>${prm.unite ? `<div class="avec-unite">${input}<span class="unite">${echapper(prm.unite)}</span></div>` : input}</div>`;
@@ -43,7 +46,7 @@
     const def = B.BLOCS[bloc.type];
     if (!def) return '';
     const vals = B.valeurs(bloc);
-    const champs = B.parametres(bloc).filter((p) => !p.si || p.si(vals)).map((p) => champHTML(p, bloc.params?.[p.id] ?? p.def, i)).join('');
+    const champs = B.parametres(bloc).filter((p) => !p.si || p.si(vals)).map((p) => champHTML(p, bloc.params?.[p.id] ?? p.def, i, bloc)).join('');
     const sousEffet = bloc.type === 'effet' ? M.EFFETS[vals.effet] : null;
     const formule = sousEffet ? sousEffet.formule : def.formule;
     return `<article class="noeud" id="n-${i}" style="--c:${def.couleur}">
@@ -89,7 +92,27 @@
     $('plan').innerHTML = html;
   }
 
+  function choisir(i, pId, valeur) {
+    const bloc = sort.blocs[i];
+    if (!bloc) return;
+    bloc.params[pId] = valeur;
+    if (bloc.type === 'effet' && pId === 'effet') {
+      bloc.params = { effet: valeur };
+      for (const prm of B.parametres(bloc)) bloc.params[prm.id] ??= prm.def;
+    }
+    rendrePlan();
+    maj();
+    document.getElementById(`b${i}-${pId}`)?.focus({ preventScroll: true });
+  }
+
   $('plan').addEventListener('click', (ev) => {
+    const cb = ev.target.closest('.choix-bouton');
+    if (cb) {
+      const i = Number(cb.dataset.i), pId = cb.dataset.p, bloc = sort.blocs[i];
+      const prm = B.parametres(bloc).find((x) => x.id === pId);
+      if (prm) Choix.ouvrir(cb, prm, bloc.params?.[pId] ?? prm.def, (k) => choisir(i, pId, k));
+      return;
+    }
     const ins = ev.target.closest('[data-ins]');
     if (ins) { const k = Number(ins.dataset.ins); insertion = insertion === k ? null : k; rendrePlan(); maj(); return; }
     const aj = ev.target.closest('[data-ajout]');
