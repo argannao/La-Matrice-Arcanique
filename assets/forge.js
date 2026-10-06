@@ -277,12 +277,93 @@
     return `≈ ${M.formatNombre(k, k < 10 ? 1 : 0)} × ${ref.txt}`;
   }
 
+  // --- Courbes du sort : température, électricité, énergie ------------------------------
+  let onglet = null;          // onglet choisi par l'utilisateur (null = automatique)
+  let dernierGraph = null;    // données du dernier graphique pour le survol
+  const DENSITES = { air: 1.2, vapeur: 0.6, eau: 1000, glace: 917, pierre: 2600, fer: 7870, bois: 600, or: 19300, chair: 1000, huile: 900, charbon: 1400 };
+  const EPS0 = 8.854e-12;
+
+  document.querySelector('.onglets').addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-onglet]');
+    if (!b) return;
+    onglet = b.dataset.onglet;
+    if (dernier) dessinerCourbe(dernier);
+  });
+
+  // Données électriques du sort (charge stockée ou effet direct « foudre »)
+  function analyseElec(r) {
+    const qMax = Math.max(0, ...r.courbe.map((p) => p.q || 0));
+    const foudres = sort.blocs.map((b, i) => ({ b, i })).filter(({ b }) => b.type === 'effet' && b.params?.effet === 'foudre');
+    if (qMax <= 0 && !foudres.length) return null;
+    const ef = r.etatFinal;
+    // rayon de la sphère chargée : volume de la matière du sort (au moins 5 cm)
+    const m = ef.matiere;
+    const vol = m ? m.masse / (DENSITES[m.type] || 1000) : 0;
+    const rayon = Math.max(0.05, Math.cbrt((3 * vol) / (4 * Math.PI)) || 0);
+    const C = 4 * Math.PI * EPS0 * rayon;
+    const tau = 50e-6; // durée d'une décharge type foudre
+    const res = { qMax, rayon, C, tau, foudres };
+    if (qMax > 0) {
+      res.V = Math.sqrt((2 * qMax) / C);
+      res.Q = C * res.V;
+      res.I = res.Q / tau;
+      res.Pcrete = qMax / tau;
+      res.arc = res.V / 1e6; // claquage de l'air sur de longues distances ~1 MV/m
+      res.fuite = ef.fuite || 0;
+      res.danger = r.courbe.some((p) => p.proche && p.q > 10 && p.iso < p.q);
+      res.isoMax = Math.max(0, ...r.courbe.map((p) => p.iso || 0));
+      res.delivre = r.livraison?.electrique ?? null;
+    }
+    if (foudres.length) {
+      const p = B.valeurs(foudres[0].b);
+      res.direct = { U: p.tension, I: p.intensite, t: p.duree, E: p.tension * p.intensite * p.duree, P: p.tension * p.intensite };
+    }
+    return res;
+  }
+
+  const fmtUnite = (x, u) => {
+    const pref = [['T', 1e12], ['G', 1e9], ['M', 1e6], ['k', 1e3], ['', 1], ['m', 1e-3], ['µ', 1e-6], ['n', 1e-9], ['p', 1e-12]];
+    for (const [s, v] of pref) if (Math.abs(x) >= v) return `${M.formatNombre(x / v, x / v < 10 ? 2 : x / v < 100 ? 1 : 0)} ${s}${u}`;
+    return `0 ${u}`;
+  };
+  const MONO = 'font-family="IBM Plex Mono, monospace"';
+
+  function cadre(W, H, g, d, h, b, r, x, extra = '') {
+    const reperes = r.etapes.filter((e) => e.duree > 0 || e.type === 'liberation').map((e) =>
+      `<line x1="${x(e.debut)}" x2="${x(e.debut)}" y1="${h}" y2="${H - b}" stroke="#2b3045" stroke-dasharray="2 3"/><text x="${x(e.debut) + 2}" y="${h + 8}" font-size="8" fill="#6f6d80" ${MONO}>${e.index + 1}</text>`).join('');
+    return `<line x1="${g}" x2="${W - d}" y1="${H - b}" y2="${H - b}" stroke="#3c4361"/>
+      <line x1="${g}" x2="${g}" y1="${h}" y2="${H - b}" stroke="#3c4361"/>${reperes}${extra}
+      <text x="${g}" y="${H - 6}" font-size="9" fill="#6f6d80" ${MONO}>0 s</text>
+      <text x="${W - d}" y="${H - 6}" font-size="9" text-anchor="end" fill="#6f6d80" ${MONO}>${fmtS(r.duree)}</text>`;
+  }
+
   function dessinerCourbe(r) {
+    const elec = analyseElec(r);
+    const aMatiere = r.etapes.some((e) => e.etat.matiere);
+    const btn = (k) => document.querySelector(`.onglets [data-onglet="${k}"]`);
+    btn('elec').hidden = !elec;
+    let actif = onglet || (elec ? 'elec' : aMatiere ? 'temp' : 'energie');
+    if (actif === 'elec' && !elec) actif = aMatiere ? 'temp' : 'energie';
+    document.querySelectorAll('.onglets [data-onglet]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.onglet === actif)));
+    $('elec-stats').innerHTML = '';
+    $('courbe-info').textContent = '';
+    if (!sort.blocs.length || r.duree <= 0) {
+      $('courbe').innerHTML = '<div class="vide" style="padding:1.2rem;font-size:.85rem">Ajoute des blocs pour voir les courbes du sort.</div>';
+      $('courbe-leg').innerHTML = ''; dernierGraph = null; return;
+    }
+    if (actif === 'elec') dessinerElec(r, elec);
+    else if (actif === 'energie') dessinerEnergie(r);
+    else dessinerTemp(r);
+  }
+
+  const legende = (items) => { $('courbe-leg').innerHTML = items.map(([c, t, pointille]) => `<span><i style="background:${c}${pointille ? ';height:0;border-top:2px dashed ' + c + ';background:none' : ''}"></i>${t}</span>`).join(''); };
+
+  function dessinerTemp(r) {
     const W = 340, H = 170, g = 34, d = 10, h = 8, b = 22;
     const pts = r.courbe;
-    if (!pts.length || r.duree <= 0 || !r.etapes.some((e) => e.etat.matiere)) {
-      $('courbe').innerHTML = '<div class="vide" style="padding:1.2rem;font-size:.85rem">La courbe apparaît dès qu\'une matière est rassemblée.</div>';
-      return;
+    if (!r.etapes.some((e) => e.etat.matiere)) {
+      $('courbe').innerHTML = '<div class="vide" style="padding:1.2rem;font-size:.85rem">La courbe de température apparaît dès qu\'une matière est rassemblée.</div>';
+      $('courbe-leg').innerHTML = ''; dernierGraph = null; return;
     }
     const fin = r.etatFinal;
     const avant = r.etapes.filter((e) => !e.etat.lance);
@@ -297,20 +378,122 @@
     const x = (t) => g + (t / r.duree) * (W - g - d);
     const y = (T) => h + (1 - (T - tMin) / (tMax - tMin)) * (H - h - b);
     const chemin = pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)},${y(p.T).toFixed(1)}`).join('');
-    const reperes = r.etapes.filter((e) => e.duree > 0).map((e) => `<line x1="${x(e.debut)}" x2="${x(e.debut)}" y1="${h}" y2="${H - b}" stroke="#2b3045" stroke-dasharray="2 3"/><text x="${x(e.debut) + 2}" y="${h + 8}" font-size="8" fill="#6f6d80" font-family="IBM Plex Mono, monospace">${e.index + 1}</text>`).join('');
-    const tick = (T) => `<text x="${g - 4}" y="${y(T) + 3}" font-size="9" text-anchor="end" fill="#6f6d80" font-family="IBM Plex Mono, monospace">${Math.round(T)}°</text>`;
+    const tick = (T) => `<text x="${g - 4}" y="${y(T) + 3}" font-size="9" text-anchor="end" fill="#6f6d80" ${MONO}>${Math.round(T)}°</text>`;
     const lim = limite !== null && limite <= tMax ? `<line x1="${g}" x2="${x(r.tempsCharge)}" y1="${y(limite)}" y2="${y(limite)}" stroke="#e2565a" stroke-width="1.2" stroke-dasharray="5 3"/>` : '';
     const lance = fin.lance ? `<line x1="${x(r.tempsCharge)}" x2="${x(r.tempsCharge)}" y1="${h}" y2="${H - b}" stroke="#62d6c6" stroke-width="1.2"/>` : '';
     $('courbe').innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Température du sort au cours du temps">
-      <line x1="${g}" x2="${W - d}" y1="${H - b}" y2="${H - b}" stroke="#3c4361"/>
-      <line x1="${g}" x2="${g}" y1="${h}" y2="${H - b}" stroke="#3c4361"/>
-      ${reperes}${lim}${lance}
-      ${tick(tMax - pad)}${tick(B.AMBIANTE)}
+      ${cadre(W, H, g, d, h, b, r, x, lim + lance)}${tick(tMax - pad)}${tick(B.AMBIANTE)}
       <path d="${chemin}" fill="none" stroke="#f0a46b" stroke-width="2" stroke-linejoin="round"/>
-      <text x="${g}" y="${H - 6}" font-size="9" fill="#6f6d80" font-family="IBM Plex Mono, monospace">0 s</text>
-      <text x="${W - d}" y="${H - 6}" font-size="9" text-anchor="end" fill="#6f6d80" font-family="IBM Plex Mono, monospace">${fmtS(r.duree)}</text>
+      <g class="guide"></g>
     </svg>`;
+    legende([['#f0a46b', 'température'], ['#e2565a', 'limite du lanceur', true], ['#62d6c6', 'lancement']]);
+    activerSurvol(r, x, W, H, g, d, h, b, (p) => `t = ${fmtS(p.t)} · ${M.formatNombre(p.T, 0)} °C`);
   }
+
+  function dessinerEnergie(r) {
+    const W = 340, H = 170, g = 40, d = 10, h = 8, b = 22;
+    const pts = r.courbe;
+    const Emax = Math.max(1, ...pts.map((p) => p.E || 0)) * 1.08;
+    const x = (t) => g + (t / r.duree) * (W - g - d);
+    const y = (E) => h + (1 - E / Emax) * (H - h - b);
+    const ligne = pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)},${y(p.E || 0).toFixed(1)}`).join('');
+    const aire = `${ligne}L${x(r.duree).toFixed(1)},${y(0)}L${x(0)},${y(0)}Z`;
+    const lance = r.etatFinal.lance ? `<line x1="${x(r.tempsCharge)}" x2="${x(r.tempsCharge)}" y1="${h}" y2="${H - b}" stroke="#62d6c6" stroke-width="1.2"/>` : '';
+    $('courbe').innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Énergie dépensée au cours du temps">
+      <defs><linearGradient id="gE" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#62d6c6" stop-opacity=".35"/><stop offset="1" stop-color="#62d6c6" stop-opacity="0"/></linearGradient></defs>
+      ${cadre(W, H, g, d, h, b, r, x, lance)}
+      <text x="${g - 4}" y="${y(Emax / 1.08) + 3}" font-size="9" text-anchor="end" fill="#6f6d80" ${MONO}>${M.formatEnergie(Emax / 1.08).replace(' ', '')}</text>
+      <path d="${aire}" fill="url(#gE)"/><path d="${ligne}" fill="none" stroke="#62d6c6" stroke-width="2"/>
+      <g class="guide"></g>
+    </svg>`;
+    legende([['#62d6c6', 'énergie dépensée (cumulée, avant rendement)'], ['#62d6c6', 'lancement']]);
+    activerSurvol(r, x, W, H, g, d, h, b, (p) => `t = ${fmtS(p.t)} · ${M.formatEnergie(p.E || 0)} dépensés · entretiens ${fmtUnite(p.P || 0, 'W')}`);
+  }
+
+  function dessinerElec(r, el) {
+    const W = 340, H = 190, g = 40, d = 10, h = 10, b = 22;
+    const pts = r.courbe;
+    const x = (t) => g + (t / r.duree) * (W - g - d);
+    if (el.qMax > 0) {
+      const isoVisibles = pts.filter((p) => p.proche && p.iso > 0).map((p) => p.iso);
+      let top = el.qMax;
+      if (isoVisibles.length && Math.min(...isoVisibles) < el.qMax * 3) top = Math.max(top, Math.min(...isoVisibles));
+      top *= 1.15;
+      const y = (q) => h + (1 - Math.min(q, top) / top) * (H - h - b);
+      // charge en paliers (aire)
+      let ch = `M${x(0)},${y(0)}`;
+      for (let i = 1; i < pts.length; i++) ch += `L${x(pts[i].t).toFixed(1)},${y(pts[i - 1].q || 0).toFixed(1)}L${x(pts[i].t).toFixed(1)},${y(pts[i].q || 0).toFixed(1)}`;
+      const aire = `${ch}L${x(r.duree)},${y(0)}Z`;
+      // isolation (seulement tant que le sort est près du lanceur)
+      let iso = '', zones = '';
+      for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1], c = pts[i];
+        if (a.proche && a.iso > 0) iso += `<line x1="${x(a.t)}" x2="${x(c.t)}" y1="${y(a.iso)}" y2="${y(a.iso)}" stroke="#6fa8e8" stroke-width="1.3" stroke-dasharray="5 3"/>`;
+        if (a.proche && a.q > 10 && a.iso < a.q) zones += `<rect x="${x(a.t)}" y="${h}" width="${Math.max(0.5, x(c.t) - x(a.t))}" height="${H - h - b}" fill="#e2565a" opacity=".16"/>`;
+      }
+      const lance = r.etatFinal.lance ? `<line x1="${x(r.tempsCharge)}" x2="${x(r.tempsCharge)}" y1="${h}" y2="${H - b}" stroke="#62d6c6" stroke-width="1.2"/><text x="${x(r.tempsCharge) + 3}" y="${H - b - 4}" font-size="8" fill="#62d6c6" ${MONO}>lancé</text>` : '';
+      const lib = r.etapes.find((e) => e.type === 'liberation' && e.etat.libere);
+      const decharge = lib ? `<g transform="translate(${x(lib.debut)},${y(el.qMax) - 2})"><path d="M-4,-14 L2,-6 L-2,-6 L4,2" fill="none" stroke="#e0d35a" stroke-width="1.6" stroke-linejoin="round"/></g><text x="${x(lib.debut) > W - 90 ? x(lib.debut) - 9 : x(lib.debut) + 7}" y="${Math.max(h + 8, y(el.qMax) - 6)}" font-size="8" fill="#e0d35a" text-anchor="${x(lib.debut) > W - 90 ? 'end' : 'start'}" ${MONO}>décharge ${fmtUnite(el.Pcrete, 'W')}</text>` : '';
+      $('courbe').innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Charge électrique du sort au cours du temps">
+        <defs><linearGradient id="gQ" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e0d35a" stop-opacity=".45"/><stop offset="1" stop-color="#e0d35a" stop-opacity=".03"/></linearGradient></defs>
+        ${zones}${cadre(W, H, g, d, h, b, r, x, iso + lance)}
+        <text x="${g - 4}" y="${y(el.qMax) + 3}" font-size="9" text-anchor="end" fill="#6f6d80" ${MONO}>${M.formatEnergie(el.qMax).replace(' ', '')}</text>
+        <path d="${aire}" fill="url(#gQ)"/><path d="${ch}" fill="none" stroke="#e0d35a" stroke-width="2" stroke-linejoin="round"/>
+        ${decharge}<g class="guide"></g>
+      </svg>`;
+      legende([['#e0d35a', 'énergie électrique stockée'], ['#6fa8e8', 'isolation du lanceur', true], ['rgba(226,86,90,.6)', 'zone d\'électrocution'], ['#62d6c6', 'lancement']]);
+      activerSurvol(r, x, W, H, g, d, h, b, (p) => `t = ${fmtS(p.t)} · charge ${M.formatEnergie(p.q || 0)}${p.proche && p.iso ? ` · isolation ${M.formatEnergie(p.iso)}` : ''} · fuite ${fmtUnite(0.02 * (p.q || 0), 'W')}`);
+      const tuile = (lbl, val, alerte = false) => `<div class="chiffre${alerte ? ' alerte' : ''}"><small>${lbl}</small><b>${val}</b></div>`;
+      $('elec-stats').innerHTML = [
+        tuile('Charge maximale', M.formatEnergie(el.qMax)),
+        tuile('Isolation du lanceur', el.isoMax ? M.formatEnergie(el.isoMax) : 'aucune', el.danger),
+        tuile('Tension estimée', fmtUnite(el.V, 'V')),
+        tuile('Charge électrique', fmtUnite(el.Q, 'C')),
+        tuile('Arc possible dans l\'air', `≈ ${M.formatNombre(el.arc, el.arc < 10 ? 1 : 0)} m`),
+        tuile('Fuite totale', M.formatEnergie(el.fuite)),
+        tuile('Courant de décharge', `≈ ${fmtUnite(el.I, 'A')}`),
+        tuile('Puissance crête', `≈ ${fmtUnite(el.Pcrete, 'W')}`),
+        el.delivre !== null ? tuile('Délivrée à la cible', M.formatEnergie(el.delivre)) : tuile('Délivrée', 'pas de libération'),
+        tuile('Rayon de la sphère', `${M.formatNombre(el.rayon * 100, 0)} cm`),
+        `<p class="note">Modèle : sphère conductrice de capacité C = 4πε₀r (${fmtUnite(el.C, 'F')}), tension V = √(2E/C), décharge en ~50 µs comme un coup de foudre. La charge fuit de 2 % par seconde : c'est l'entretien payé tant que le sort existe.</p>`,
+      ].join('');
+      if (el.danger) $('courbe-info').innerHTML = '<span style="color:#f2b5b6">⚠ La charge dépasse l\'isolation pendant que le sort est près de toi.</span>';
+    } else {
+      // effet direct « foudre » : pas de stockage, une décharge instantanée
+      const f = el.direct;
+      $('courbe').innerHTML = `<svg viewBox="0 0 340 110" role="img" aria-label="Profil de la décharge">
+        <line x1="40" x2="330" y1="88" y2="88" stroke="#3c4361"/><line x1="40" x2="40" y1="10" y2="88" stroke="#3c4361"/>
+        <path d="M40,88 L120,88 L124,16 L132,40 L138,22 L150,70 L170,84 L330,88" fill="none" stroke="#e0d35a" stroke-width="2" stroke-linejoin="round"/>
+        <text x="36" y="20" font-size="9" text-anchor="end" fill="#6f6d80" ${MONO}>${fmtUnite(f.P, 'W')}</text>
+        <text x="40" y="104" font-size="9" fill="#6f6d80" ${MONO}>0</text><text x="330" y="104" font-size="9" text-anchor="end" fill="#6f6d80" ${MONO}>${fmtUnite(f.t, 's')}</text>
+      </svg>`;
+      legende([['#e0d35a', 'puissance de la décharge (allure)']]);
+      const tuile = (lbl, val) => `<div class="chiffre"><small>${lbl}</small><b>${val}</b></div>`;
+      $('elec-stats').innerHTML = [tuile('Tension', fmtUnite(f.U, 'V')), tuile('Intensité', fmtUnite(f.I, 'A')), tuile('Durée', fmtUnite(f.t, 's')), tuile('Énergie', M.formatEnergie(f.E)), tuile('Puissance', fmtUnite(f.P, 'W')), tuile('Arc possible', `≈ ${M.formatNombre(f.U / 1e6, 2)} m`),
+        '<p class="note">Effet direct : la décharge naît d\'un coup au point d\'ancrage, sans charge stockée ni fuite. Pour un sort qui accumule sa charge, utilise le bloc « Charger électriquement ».</p>'].join('');
+      dernierGraph = null;
+    }
+  }
+
+  // Survol : ligne-guide et valeurs à l'instant pointé
+  function activerSurvol(r, x, W, H, g, d, h, b, texte) {
+    const svg = $('courbe').querySelector('svg');
+    const guide = svg.querySelector('.guide');
+    const pts = r.courbe;
+    dernierGraph = { r };
+    const surPoint = (ev) => {
+      const box = svg.getBoundingClientRect();
+      const px = ((ev.clientX - box.left) / box.width) * W;
+      const t = Math.max(0, Math.min(r.duree, ((px - g) / (W - g - d)) * r.duree));
+      let p = pts[0];
+      for (const q of pts) { if (q.t <= t) p = q; else break; }
+      guide.innerHTML = `<line x1="${x(t)}" x2="${x(t)}" y1="${h}" y2="${H - b}" stroke="#e8e4d6" stroke-opacity=".35"/>`;
+      $('courbe-info').textContent = texte({ ...p, t });
+    };
+    svg.addEventListener('pointermove', surPoint);
+    svg.addEventListener('pointerleave', () => { guide.innerHTML = ''; });
+  }
+
 
   // --- Actions -------------------------------------------------------------------------
   function fiche() {

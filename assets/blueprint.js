@@ -662,9 +662,10 @@ const Blueprint = (() => {
       confine: false, protection: 0, protElec: 0, bouclier: 0, lance: false, v: 0, distanceVol: 0, libere: false,
       forme: 'sphere', fragments: 1, charge: 0, pression: 1, lumiere: 0,
       vise: false, guide: false, cache: false, levite: false, piege: null,
-      entretiens: {}, tempsCharge: null, livraison: null,
+      entretiens: {}, tempsCharge: null, livraison: null, fuite: 0,
     };
-    const courbe = [{ t: 0, T: AMBIANTE }];
+    // Courbes : température, charge électrique, isolation, puissance d'entretien, énergie cumulée
+    const courbe = [{ t: 0, T: AMBIANTE, q: 0, iso: 0, proche: true, P: 0, E: 0 }];
     const etapes = [];
     let ePonctuelle = 0, eEntretien = 0;
 
@@ -702,6 +703,16 @@ const Blueprint = (() => {
         // Fait passer dt secondes avec une puissance nette P (W) injectée dans la matière
         evoluer(dt, P = 0, o = {}) {
           if (!(dt > 0)) return;
+          // puissance d'entretien pendant ce laps de temps
+          const fVol = e.lance ? ((1 + e.distanceVol / R.porteeRef) ** 2 + 1) / 2 : e.facteurDistance;
+          let ent = 0;
+          for (const [k, w] of Object.entries(e.entretiens)) {
+            if (ENTRETIENS_LANCEUR.includes(k)) ent += e.lance ? 0 : w;
+            else ent += w * fVol;
+          }
+          const E0 = ePonctuelle + eEntretien;
+          const proche = !e.lance && !e.libere && !!e.ancre && estProche(e.ancre);
+          courbe.push({ t: e.t, T: e.T, q: e.charge, iso: e.protElec, proche, P: ent, E: E0 });
           const h = ctx.pertes();
           const m = e.matiere?.masse, c = e.matiere ? M.MATERIAUX[e.matiere.type].c : 0;
           const T0 = e.T, Teq = AMBIANTE + P / h, tau = m ? (m * c) / h : 1;
@@ -716,7 +727,7 @@ const Blueprint = (() => {
           for (let k = 1; k <= n; k++) {
             const tk = (dt * k) / n;
             const T = !m ? AMBIANTE : o.fixe ? T0 : borner(Teq + (T0 - Teq) * Math.exp(-tk / tau));
-            courbe.push({ t: e.t + tk, T });
+            courbe.push({ t: e.t + tk, T, q: e.charge, iso: e.protElec, proche, P: ent, E: E0 + ent * tk });
             verifierCorps(T);
           }
           if (m && !o.fixe) {
@@ -725,13 +736,8 @@ const Blueprint = (() => {
             if (b && e.T === b.T && Tf !== e.T && P === 0) ctx.alerte('info', `La matière se stabilise à ${M.formatNombre(b.T, 0)} °C, son point ${b.txt}.`);
           }
           // entretiens
-          const fVol = e.lance ? ((1 + e.distanceVol / R.porteeRef) ** 2 + 1) / 2 : e.facteurDistance;
-          let ent = 0;
-          for (const [k, w] of Object.entries(e.entretiens)) {
-            if (ENTRETIENS_LANCEUR.includes(k)) ent += e.lance ? 0 : w;
-            else ent += w * fVol;
-          }
           etape.energie += ent * dt; eEntretien += ent * dt;
+          e.fuite += (e.entretiens.charge || 0) * fVol * dt;
           e.t += dt; etape.duree += dt;
         },
       };
@@ -764,6 +770,9 @@ const Blueprint = (() => {
         if (!e.ancre && bloc.type !== 'ancrage') e.ancre = 'main';
         def.appliquer(e, valeurs(bloc), ctx);
       }
+      // point instantané après le bloc (sauts : charge, compression, décharge à la libération)
+      const prochePt = !e.lance && !e.libere && !!e.ancre && estProche(e.ancre);
+      courbe.push({ t: e.t, T: e.T, q: e.libere ? 0 : e.charge, iso: e.protElec, proche: prochePt, P: 0, E: ePonctuelle + eEntretien, bloc: i });
       etape.etat = {
         t: e.t, T: e.T, matiere: e.matiere ? { ...e.matiere } : null, confine: e.confine,
         protection: e.protection, protElec: e.protElec, bouclier: e.bouclier, lance: e.lance, libere: e.libere, v: e.v,
