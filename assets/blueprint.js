@@ -42,6 +42,36 @@ const Blueprint = (() => {
                 note: 'Un objet longuement lié au lanceur : la distance pèse six fois moins, mais l\'entretien du lien coûte un peu (énergie ×1,1).' },
   };
   const ancrageDe = (cle) => ANCRAGES[cle] || ANCRAGES.main;
+
+  // --- Modes de libération -----------------------------------------------------
+  // rend : part de l'énergie contenue réellement délivrée · retour : part qui frappe le lanceur si le sort est encore près de lui
+  // parts : composantes délivrées (thermique, cinétique, électrique) · zone : touche une zone plutôt qu'une cible
+  const LIBERATIONS = {
+    explosion:    { nom: 'Explosion (zone)', rend: 1, retour: 1, zone: true },
+    contact:      { nom: 'Impact (une cible)', rend: 1, retour: 1 },
+    perforation:  { nom: 'Perforation (point concentré)', rend: 0.9, retour: 0.5,
+                    note: 'Toute l\'énergie se concentre sur quelques centimètres carrés : idéal pour traverser une armure ou une paroi, inutile pour toucher large.' },
+    cone:         { nom: 'Souffle en cône', rend: 0.7, retour: 0.15, zone: true,
+                    note: 'Projetée vers l\'avant : 30 % se perdent sur les côtés, mais très peu revient vers le lanceur.' },
+    onde:         { nom: 'Onde de choc (renversement)', rend: 0.5, retour: 1, zone: true,
+                    note: 'Tout est converti en poussée : seule la moitié de l\'énergie agit, mais tout ce qui est dans la zone est projeté au sol.' },
+    implosion:    { nom: 'Implosion (écrasement)', rend: 0.8, retour: 0.1, confine: true,
+                    note: 'Le confinement se referme au lieu de se rompre : la cible est écrasée vers le centre et presque rien ne s\'échappe autour.' },
+    rayonnement:  { nom: 'Rayonnement (chaleur et lumière)', rend: 1, retour: 1, zone: true, parts: { th: 1, ci: 0, el: 0 },
+                    note: 'Seule la chaleur est délivrée, en un éclair de rayonnement : brûle et éblouit toute la zone, sans souffle ni impact.' },
+    eclats:       { nom: 'Éclats (fragmentation)', rend: 0.85, retour: 1, zone: true, solide: true, fragments: 20,
+                    note: 'La matière solide vole en une vingtaine d\'éclats tranchants : moins d\'énergie par impact, beaucoup plus de cibles touchées.' },
+    arc:          { nom: 'Arc électrique (en chaîne)', rend: 1, retour: 1, parts: { th: 0, ci: 0, el: 1 }, charge: true,
+                    note: 'Seule la charge est délivrée, en un arc qui saute de cible en cible en perdant de sa force à chaque saut.' },
+    brasier:      { nom: 'Combustion prolongée (brasier)', rend: 1, retour: 1, zone: true, duree: true,
+                    note: 'L\'énergie s\'écoule pendant la durée choisie : moins violent qu\'une explosion, mais tout ce qui reste dans la zone brûle.' },
+    impregnation: { nom: 'Imprégnation d\'un objet', rend: 0.9, retour: 0,
+                    note: 'L\'énergie passe dans un objet touché (lame chauffée au rouge, pierre chargée…) au lieu d\'être relâchée : elle s\'en dissipera à son rythme.' },
+    reabsorption: { nom: 'Réabsorption (récupérer l\'énergie)', rend: 0, retour: 0, recup: 0.3,
+                    note: 'Le lanceur reprend le sort en lui : environ 30 % de l\'énergie contenue reviennent dans sa réserve, rien n\'est délivré.' },
+    dissipation:  { nom: 'Dissipation douce', rend: 0, retour: 0,
+                    note: 'L\'énergie se disperse lentement dans l\'environnement, sans effet notable.' },
+  };
   const estProche = (cle) => ancrageDe(cle).zone !== 'loin';
   // Tolérance du corps sans protection, par ancrage (utilisée aussi par la courbe de la forge)
   const TOLERANCE = Object.fromEntries(Object.entries(ANCRAGES).filter(([, a]) => a.tol).map(([k, a]) => [k, a.tol]));
@@ -186,18 +216,42 @@ const Blueprint = (() => {
       description: 'Relâche toute l\'énergie contenue dans le sort : le confinement se rompt, la chaleur, le mouvement et la charge se déchargent sur la cible.',
       formule: 'E délivrée = m·c·|T − T_amb| + ½·m·v² + charge',
       params: [
-        { id: 'mode', label: 'Forme', type: 'select', def: 'explosion', options: { explosion: 'Explosion (zone)', contact: 'Impact (une cible)', dissipation: 'Dissipation douce' } },
+        { id: 'mode', label: 'Forme', type: 'select', def: 'explosion', options: opts(LIBERATIONS) },
+        { id: 'duree', label: 'Durée du brasier', unite: 's', def: 10, min: 1, si: (p) => !!LIBERATIONS[p.mode]?.duree },
+        { id: 'cibles', label: 'Cibles en chaîne', def: 3, min: 1, si: (p) => !!LIBERATIONS[p.mode]?.charge },
       ],
       appliquer(e, p, ctx) {
         const m = e.matiere?.masse || 0, c = e.matiere ? M.MATERIAUX[e.matiere.type].c : 0;
         const th = m * c * Math.abs(e.T - AMBIANTE), ci = e.lance ? 0.5 * m * e.v ** 2 : 0, el = e.charge;
-        e.livraison = { thermique: th, cinetique: ci, electrique: el, total: th + ci + el, mode: p.mode, forme: e.forme, fragments: e.fragments };
+        const contenu = th + ci + el;
+        let cle = LIBERATIONS[p.mode] ? p.mode : 'explosion';
+        // conditions : sinon on retombe sur une explosion
+        if (LIBERATIONS[cle].confine && !e.confine) { ctx.alerte('attention', 'Sans confinement, rien ne peut se refermer : l\'implosion devient une simple explosion.'); cle = 'explosion'; }
+        if (LIBERATIONS[cle].solide && phaseDe(e.matiere || {}) !== 'solide') { ctx.alerte('attention', 'Seule une matière solide peut voler en éclats : le sort explose normalement.'); cle = 'explosion'; }
+        if (LIBERATIONS[cle].charge && !(el > 0)) ctx.alerte('attention', 'Le sort ne porte aucune charge électrique : l\'arc n\'a rien à transporter.');
+        const L = LIBERATIONS[cle];
+        const parts = L.parts || { th: 1, ci: 1, el: 1 };
+        const total = (th * parts.th + ci * parts.ci + el * parts.el) * L.rend;
+        const fragments = e.fragments * (L.fragments || 1);
+        e.livraison = { thermique: th * parts.th * L.rend, cinetique: ci * parts.ci * L.rend, electrique: el * parts.el * L.rend, total, mode: cle, forme: e.forme, fragments };
         e.libere = true;
         e.tempsCharge ??= e.t;
-        const contactCible = ancrageDe(e.ancre).zone === 'contact' && p.mode === 'contact';
-        if (!e.lance && estProche(e.ancre) && !contactCible && p.mode !== 'dissipation' && th + ci + el > 1000)
-          ctx.alerte('danger', `La libération a lieu ${ancrageDe(e.ancre).ou} : tu encaisses ${M.formatEnergie(th + ci + el)}.`);
-        if (e.fragments > 1 && e.livraison.total > 0) ctx.alerte('info', `${e.fragments} impacts d'environ ${M.formatEnergie(e.livraison.total / e.fragments)} chacun.`);
+        if (L.note) ctx.alerte('info', L.note);
+        // ce que le lanceur encaisse s'il est encore au contact du sort
+        const contactCible = ancrageDe(e.ancre).zone === 'contact' && ['contact', 'perforation', 'impregnation'].includes(cle);
+        const subi = contenu * L.rend * L.retour;
+        if (!e.lance && estProche(e.ancre) && !contactCible && subi > 1000)
+          ctx.alerte('danger', `La libération a lieu ${ancrageDe(e.ancre).ou} : tu encaisses ${M.formatEnergie(subi)}.`);
+        if (L.recup) {
+          if (e.lance || !estProche(e.ancre)) ctx.alerte('attention', 'Le sort est trop loin de toi pour être réabsorbé : son énergie se perd.');
+          else { ctx.rendre(contenu * L.recup); ctx.alerte('info', `Tu récupères environ ${M.formatEnergie(contenu * L.recup)}.`); }
+        }
+        if (L.duree && total > 0) ctx.alerte('info', `Le brasier délivre environ ${M.formatEnergie(total / p.duree)} par seconde pendant ${p.duree} s.`);
+        if (L.charge && el > 0 && p.cibles > 1) {
+          const k = 0.6, parts2 = Array.from({ length: p.cibles }, (_, i) => k ** i), somme = parts2.reduce((a, b) => a + b, 0);
+          ctx.alerte('info', `Arc sur ${p.cibles} cibles : ${parts2.map((f) => M.formatEnergie(total * f / somme)).join(', ')}.`);
+        }
+        if (fragments > 1 && total > 0) ctx.alerte('info', `${fragments} impacts d'environ ${M.formatEnergie(total / fragments)} chacun.`);
         if (e.piege) ctx.alerte('info', `Se déclenche ${({ duree: 'après le délai', contact: 'au contact', proximite: 'à l\'approche d\'un être vivant', mot: 'sur le mot de commande' })[e.piege]}.`);
         e.entretiens = {};
       },
@@ -622,6 +676,7 @@ const Blueprint = (() => {
       const ctx = {
         R,
         alerte: (niv, txt) => etape.alertes.push({ niv, txt }),
+        rendre(j) { const v = Math.min(Math.max(0, j), ePonctuelle); etape.energie -= v; ePonctuelle -= v; },
         energie(j, o = {}) {
           const f = o.sansDistance || e.lance ? 1 : e.facteurDistance;
           const v = Math.max(0, j) * f;
@@ -765,7 +820,7 @@ const Blueprint = (() => {
     return base;
   }
 
-  return { AMBIANTE, TOLERANCE, ANCRAGES, FAMILLES, FORMES, TRANSITIONS, COMBUSTIBLES, BLOCS, parametres, valeurs, nouveauBloc, simuler, cout, normaliser };
+  return { AMBIANTE, TOLERANCE, ANCRAGES, LIBERATIONS, FAMILLES, FORMES, TRANSITIONS, COMBUSTIBLES, BLOCS, parametres, valeurs, nouveauBloc, simuler, cout, normaliser };
 })();
 
 /* --- Blueprints d'exemple -------------------------------------------------- */

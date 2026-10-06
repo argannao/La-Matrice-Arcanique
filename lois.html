@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/style.css?v=6">
+  <link rel="stylesheet" href="assets/style.css?v=7">
   <style>
     .sommaire { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 1.5rem 0; }
     .sommaire a { font-size: 0.85rem; text-decoration: none; padding: 0.3rem 0.65rem; border: 1px solid var(--ligne); border-radius: 99px; color: var(--texte-doux); }
@@ -34,6 +34,7 @@
       <a href="#blueprint">Le blueprint</a>
       <a href="#exemple">Exemple : la boule de feu</a>
       <a href="#ancrages">Les ancrages</a>
+      <a href="#liberations">Les libérations</a>
       <a href="#blocs">Les blocs</a>
       <a href="#thermique">Chaleur, états, combustion</a>
       <a href="#dangers">Dangers</a>
@@ -69,6 +70,15 @@
       <div class="table-wrap"><table>
         <thead><tr><th>Ancrage</th><th>Le corps supporte</th><th>Coût</th><th>Particularité</th></tr></thead>
         <tbody id="t-ancrages"></tbody>
+      </table></div>
+    </section>
+
+    <section id="liberations">
+      <h2>Les libérations</h2>
+      <p>La libération décide comment l'énergie contenue dans le sort est relâchée. Toutes ne délivrent pas tout, et toutes ne protègent pas le lanceur de la même façon s'il est encore au contact du sort.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Forme</th><th>Énergie délivrée</th><th>Revient sur le lanceur</th><th>Particularité</th></tr></thead>
+        <tbody id="t-liberations"></tbody>
       </table></div>
     </section>
 
@@ -191,9 +201,9 @@
     </section>
   </main>
 
-  <script src="assets/matrice.js?v=6"></script>
-  <script src="assets/blueprint.js?v=6"></script>
-  <script src="assets/commun.js?v=6"></script>
+  <script src="assets/matrice.js?v=7"></script>
+  <script src="assets/blueprint.js?v=7"></script>
+  <script src="assets/commun.js?v=7"></script>
   <script>
   (() => {
     const M = Matrice, B = Blueprint, R = M.reglages(), $ = (id) => document.getElementById(id);
@@ -221,6 +231,13 @@
       { t: a.tol ? `${M.formatNombre(a.tol.bas)} à ${M.formatNombre(a.tol.haut)} °C` : 'hors d\'atteinte', num: true },
       { t: (a.variable ? `selon distance${a.porteeMult ? ` (÷${a.porteeMult})` : ''}` : '—') + (a.coef ? ` · ×${M.formatNombre(a.coef, 2)}` : ''), num: true },
       { html: `<small style="color:var(--texte-doux)">${echapper(a.note || '')}</small>` },
+    ])).join('');
+    const pct = (x) => Math.round(x * 100) + ' %';
+    $('t-liberations').innerHTML = Object.values(B.LIBERATIONS).map((L) => ligne([
+      L.nom,
+      { t: L.recup ? `0 % (récupère ${pct(L.recup)})` : pct(L.rend) + (L.parts ? (L.parts.th ? ' (chaleur seule)' : ' (charge seule)') : ''), num: true },
+      { t: pct(L.retour), num: true },
+      { html: `<small style="color:var(--texte-doux)">${echapper(L.note || (L.zone ? 'Touche toute une zone.' : 'Touche une seule cible.'))}</small>` },
     ])).join('');
     $('t-formes').innerHTML = Object.values(B.FORMES).map((f) => ligne([f.nom, { t: '×' + M.formatNombre(f.pertes, 1), num: true }])).join('');
 
