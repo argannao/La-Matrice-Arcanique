@@ -1,26 +1,105 @@
 /* ==========================================================================
    La Matrice Arcanique — moteur de blueprints
    Un sort est une suite de blocs exécutés dans l'ordre. Une simulation suit
-   l'état du sort (matière, température, temps, lancement…) bloc après bloc,
-   compte l'énergie dépensée et signale les erreurs de conception.
+   l'état du sort (matière, température, phase, charge, temps, lancement…)
+   bloc après bloc, compte l'énergie dépensée et signale les erreurs.
    ========================================================================== */
 const Blueprint = (() => {
   const M = Matrice;
   const AMBIANTE = 20; // °C
 
   const opts = (obj) => Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, v.nom]));
-  const MATIERES_AMBIANTES = ['air', 'eau', 'pierre', 'bois', 'fer'];
+  const nomMat = (t) => M.MATERIAUX[t]?.nom || t;
 
   // Tolérance du corps sans protection, selon la distance à l'ancrage
   const TOLERANCE = { main: { haut: 50, bas: -10 }, devant: { haut: 250, bas: -60 } };
+
+  // --- Familles de blocs (ordre de la palette) ------------------------------
+  const FAMILLES = {
+    fondation: 'Fondation',
+    matiere: 'Matière',
+    energie: 'Énergie',
+    mouvement: 'Mouvement',
+    protection: 'Protection',
+    controle: 'Contrôle & perception',
+  };
+
+  // --- Physique de la matière -----------------------------------------------
+  const PHASE_DEFAUT = { air: 'gaz', vapeur: 'gaz', eau: 'liquide', huile: 'liquide' }; // sinon solide
+  const famille = (t) => (['eau', 'glace', 'vapeur'].includes(t) ? 'eau' : t);
+  // Points de changement d'état et chaleurs latentes (J/kg)
+  const TRANSITIONS = {
+    eau:    { fusion: { T: 0, L: 334e3 },    ebullition: { T: 100, L: 2257e3 } },
+    fer:    { fusion: { T: 1538, L: 247e3 }, ebullition: { T: 2862, L: 6090e3 } },
+    or:     { fusion: { T: 1064, L: 64e3 },  ebullition: { T: 2856, L: 1645e3 } },
+    pierre: { fusion: { T: 1200, L: 400e3 } },
+    air:    { ebullition: { T: -194, L: 200e3 } },
+    huile:  { ebullition: { T: 300, L: 300e3 } },
+  };
+  const COMBUSTIBLES = {
+    bois:    { pci: 15e6, ignition: 300, flamme: 1100 },
+    charbon: { pci: 30e6, ignition: 400, flamme: 1400 },
+    huile:   { pci: 42e6, ignition: 250, flamme: 1900 },
+  };
+  const FORMES = {
+    sphere: { nom: 'Sphère', pertes: 1, txt: 'une sphère' },
+    lance:  { nom: 'Lance / javelot', pertes: 1.3, txt: 'une lance perforante' },
+    disque: { nom: 'Disque tranchant', pertes: 1.8, txt: 'un disque tranchant' },
+    cone:   { nom: 'Cône (souffle)', pertes: 3, txt: 'un cône de souffle' },
+    mur:    { nom: 'Mur', pertes: 4, txt: 'un mur' },
+    nuage:  { nom: 'Nuage', pertes: 6, txt: 'un nuage' },
+  };
+  const phaseDe = (m) => m.phase || PHASE_DEFAUT[m.type] || 'solide';
+
+  // Prochain point de changement d'état rencontré en chauffant (sens +1) ou en refroidissant (sens −1)
+  function barriere(e, sens) {
+    if (!e.matiere) return null;
+    const tr = TRANSITIONS[famille(e.matiere.type)];
+    if (!tr) return null;
+    const ph = phaseDe(e.matiere);
+    if (sens > 0) {
+      if (ph === 'solide' && tr.fusion) return { T: tr.fusion.T, txt: 'de fusion' };
+      if (ph === 'liquide' && tr.ebullition) return { T: tr.ebullition.T, txt: 'd\'ébullition' };
+    } else {
+      if (ph === 'liquide' && tr.fusion) return { T: tr.fusion.T, txt: 'de solidification' };
+      if (ph === 'gaz' && tr.ebullition) return { T: tr.ebullition.T, txt: 'de condensation' };
+    }
+    return null;
+  }
+
+  function changerPhase(m, phase) {
+    m.phase = phase;
+    if (famille(m.type) === 'eau') m.type = phase === 'solide' ? 'glace' : phase === 'gaz' ? 'vapeur' : 'eau';
+  }
+
+  function majConfinement(e) {
+    if (e.confine && e.matiere) e.entretiens.confinement = 500 * Math.max(0.1, e.matiere.masse);
+    if (e.cache) e.entretiens.dissimulation = 200 * Math.max(0.1, e.matiere?.masse || 0.1);
+    if (e.levite) e.entretiens.levitation = 9.81 * (e.matiere?.masse || 0);
+  }
+
+  function nouvelleMatiere(e, type, masse) {
+    if (e.matiere && famille(e.matiere.type) === famille(type) && phaseDe(e.matiere) === (PHASE_DEFAUT[type] || 'solide')) {
+      // même matière : on mélange (température pondérée)
+      const m0 = e.matiere.masse;
+      e.T = (e.T * m0 + AMBIANTE * masse) / (m0 + masse);
+      e.matiere.masse += masse;
+    } else {
+      e.matiere = { type, masse, phase: PHASE_DEFAUT[type] || 'solide' };
+      e.T = AMBIANTE;
+    }
+    majConfinement(e);
+  }
 
   // --- Blocs ---------------------------------------------------------------
   // appliquer(etat, params, ctx) : modifie l'état ; ctx.energie(), ctx.evoluer(), ctx.mental(), ctx.alerte()
   // ctx.mental() = opération de pure concentration : brève, ajustable par le réglage « durée des opérations mentales »
   const BLOCS = {
+    /* ===================== FONDATION ===================== */
     ancrage: {
-      nom: 'Ancrage', ecole: 'Fondation', nature: 'inspire', couleur: '#8a93b8',
+      fam: 'fondation', nom: 'Ancrage', ecole: 'Fondation', nature: 'inspire', couleur: '#8a93b8',
       description: 'Point d\'origine du sort. Tout blueprint commence ici. Plus l\'ancrage est loin, plus chaque bloc coûte cher.',
+      formule: 'à distance : énergie × (1 + d / portée_ref)²',
       params: [
         { id: 'lieu', label: 'Lieu', type: 'select', def: 'main', options: { main: 'Dans la main', devant: 'Devant soi (1 m)', distance: 'À distance' } },
         { id: 'distance', label: 'Distance', unite: 'm', def: 10, min: 0, si: (p) => p.lieu === 'distance' },
@@ -34,100 +113,8 @@ const Blueprint = (() => {
         ctx.mental(0.1);
       },
     },
-    rassembler: {
-      nom: 'Rassembler la matière', ecole: 'Fondation', nature: 'inspire', couleur: '#8a93b8',
-      description: 'Attirer et condenser de la matière ambiante au point d\'ancrage (air, eau d\'une source, pierre du sol…). Loi inventée : 300 J par kilogramme.',
-      formule: 'E = m · 300 J/kg   ·   durée = 0,2 s + 0,05 s/kg',
-      params: [
-        { id: 'matiere', label: 'Matière', type: 'select', def: 'air', options: Object.fromEntries(MATIERES_AMBIANTES.map((k) => [k, M.MATERIAUX[k].nom])) },
-        { id: 'masse', label: 'Masse', unite: 'kg', def: 1, min: 0.001, step: 0.1 },
-      ],
-      appliquer(e, p, ctx) {
-        if (e.matiere && e.matiere.type !== p.matiere) ctx.alerte('attention', `La ${M.MATERIAUX[e.matiere.type].nom.toLowerCase()} déjà présente est remplacée.`);
-        if (e.matiere && e.matiere.type === p.matiere) e.matiere.masse += p.masse;
-        else { e.matiere = { type: p.matiere, masse: p.masse }; e.T = AMBIANTE; }
-        if (e.confine) e.entretiens.confinement = 500 * Math.max(0.1, e.matiere.masse);
-        ctx.energie(p.masse * 300);
-        ctx.mental(0.2 + 0.05 * p.masse);
-      },
-    },
-    creer: {
-      nom: 'Créer la matière', ecole: 'Genèse', nature: 'rigoureux', couleur: '#c79bf0',
-      description: 'Faire apparaître de la matière ex nihilo. Relativité stricte : un gramme coûte autant qu\'une bombe atomique.',
-      formule: 'E = m · c²',
-      params: [
-        { id: 'matiere', label: 'Matière', type: 'select', def: 'eau', options: opts(M.MATERIAUX) },
-        { id: 'masse', label: 'Masse', unite: 'g', def: 1, min: 0, step: 0.1 },
-      ],
-      appliquer(e, p, ctx) {
-        const kg = p.masse / 1000;
-        if (e.matiere && e.matiere.type === p.matiere) e.matiere.masse += kg;
-        else { e.matiere = { type: p.matiere, masse: kg }; e.T = AMBIANTE; }
-        ctx.energie(kg * M.C * M.C);
-        ctx.mental(0.3);
-      },
-    },
-    protection: {
-      nom: 'Protection thermique', ecole: 'Abjuration', nature: 'inspire', couleur: '#6fa8e8',
-      description: 'Protège la main et le corps du lanceur jusqu\'à une température donnée (chaud comme froid). Elle s\'entretient tant que le sort reste près du lanceur.',
-      formule: 'mise en place = 2 J/°C   ·   entretien = 0,002 · seuil² W',
-      params: [
-        { id: 'seuil', label: 'Supporte jusqu\'à', type: 'select', def: '1000',
-          options: { '200': '± 200 °C', '500': '± 500 °C', '1000': '± 1 000 °C', '2000': '± 2 000 °C', '3500': '± 3 500 °C' } },
-      ],
-      appliquer(e, p, ctx) {
-        const s = Number(p.seuil);
-        if (e.ancre === 'distance') ctx.alerte('info', 'Le sort est ancré loin de toi : cette protection ne sert pas à grand-chose.');
-        e.protection = Math.max(e.protection, s);
-        e.entretiens.protection = 0.002 * e.protection ** 2;
-        ctx.energie(2 * s, { sansDistance: true });
-        ctx.mental(0.2);
-      },
-    },
-    confinement: {
-      nom: 'Confinement', ecole: 'Abjuration', nature: 'inspire', couleur: '#6fa8e8',
-      description: 'Enferme la matière dans une bulle de force : la chaleur ne s\'échappe presque plus et la masse ne se disperse pas en vol. S\'entretient en continu.',
-      formule: 'mise en place = 100 J   ·   entretien = 500 W/kg',
-      params: [],
-      appliquer(e, p, ctx) {
-        if (!e.matiere) ctx.alerte('attention', 'Rien à contenir : rassemble ou crée de la matière avant.');
-        e.confine = true;
-        e.entretiens.confinement = 500 * Math.max(0.1, e.matiere?.masse || 0.1);
-        ctx.energie(100);
-        ctx.mental(0.2);
-      },
-    },
-    chaleur: {
-      nom: 'Chauffer / refroidir', ecole: 'Pyromancie / Cryomancie', nature: 'rigoureux', couleur: '#e8904e',
-      description: 'Injecte (ou retire) de la chaleur à une puissance donnée jusqu\'à la température voulue. Le temps nécessaire dépend des pertes : sans confinement, la chaleur s\'échappe vite.',
-      formule: 'm·c·dT/dt = ±P − h·(T − T_amb)',
-      params: [
-        { id: 'puissance', label: 'Puissance', unite: 'kW', def: 200, min: 0.001, step: 10 },
-        { id: 'cible', label: 'Température visée', unite: '°C', def: 800, step: 50 },
-      ],
-      appliquer(e, p, ctx) {
-        if (!e.matiere) { ctx.alerte('danger', 'Rien à chauffer : la chaleur se dissipe dans le vide. Ajoute « Rassembler la matière » avant.'); return; }
-        const P = p.puissance * 1000;
-        const m = e.matiere.masse, c = M.MATERIAUX[e.matiere.type].c;
-        const h = ctx.pertes(), tau = (m * c) / h;
-        const T0 = e.T, Tc = p.cible;
-        if (Math.abs(Tc - T0) < 0.5) { ctx.alerte('info', 'La matière est déjà à cette température.'); return; }
-        const s = Math.sign(Tc - T0);
-        const Teq = AMBIANTE + (s * P) / h; // température d'équilibre si on chauffe indéfiniment
-        let t;
-        if ((s > 0 && Tc >= Teq) || (s < 0 && Tc <= Teq)) {
-          t = tau * Math.log(20); // 95 % du chemin
-          ctx.alerte('attention', `Puissance insuffisante : les pertes égalent la puissance vers ${M.formatNombre(Teq, 0)} °C. Augmente la puissance ou ajoute un confinement.`);
-        } else {
-          t = tau * Math.log((T0 - Teq) / (Tc - Teq));
-        }
-        ctx.energie(P * t);
-        ctx.evoluer(t, s * P);
-        if (!e.confine && Math.abs(e.T - AMBIANTE) > 200) ctx.alerte('info', `Sans confinement, ${M.formatNombre(h * Math.abs(e.T - AMBIANTE) / 1000, 1)} kW s'échappent en permanence à cette température.`);
-      },
-    },
     attendre: {
-      nom: 'Attendre', ecole: 'Fondation', nature: 'rigoureux', couleur: '#8a93b8',
+      fam: 'fondation', nom: 'Attendre', ecole: 'Fondation', nature: 'rigoureux', couleur: '#8a93b8',
       description: 'Laisser passer du temps. Sans maintien, la matière se rapproche de la température ambiante ; avec maintien, on compense les pertes.',
       formule: 'maintien : P = h · (T − T_amb)',
       params: [
@@ -142,9 +129,267 @@ const Blueprint = (() => {
         } else ctx.evoluer(p.duree);
       },
     },
+    retardement: {
+      fam: 'fondation', nom: 'Retardement / piège', ecole: 'Fondation', nature: 'mixte', couleur: '#8a93b8',
+      description: 'Le sort reste en suspens jusqu\'à un déclencheur. Tout ce qui s\'entretient (confinement, charge…) continue de coûter pendant l\'attente : un piège coûteux à maintenir s\'épuise vite.',
+      formule: 'E = Σ entretiens × attente',
+      params: [
+        { id: 'declencheur', label: 'Déclencheur', type: 'select', def: 'proximite', options: { duree: 'Après un délai', contact: 'Au contact', proximite: 'À l\'approche d\'un être vivant', mot: 'Sur un mot de commande' } },
+        { id: 'attente', label: 'Attente prévue', unite: 's', def: 60, min: 0 },
+      ],
+      appliquer(e, p, ctx) {
+        e.piege = p.declencheur;
+        e.tempsCharge ??= e.t; // l'attente du piège ne compte pas dans le temps d'incantation
+        const W = ctx.puissanceEntretien();
+        if (W > 0) ctx.alerte('info', `Pendant l'attente, le sort consomme ${M.formatEnergie(W * 60)} par minute en entretiens.`);
+        if (!e.lance && e.ancre === 'main' && p.attente > 10) ctx.alerte('attention', 'Un piège tenu dans la main immobilise le lanceur : ancre-le devant toi ou à distance.');
+        ctx.evoluer(p.attente);
+      },
+    },
+    liberation: {
+      fam: 'fondation', nom: 'Libération', ecole: 'Fondation', nature: 'rigoureux', couleur: '#e2565a',
+      description: 'Relâche toute l\'énergie contenue dans le sort : le confinement se rompt, la chaleur, le mouvement et la charge se déchargent sur la cible.',
+      formule: 'E délivrée = m·c·|T − T_amb| + ½·m·v² + charge',
+      params: [
+        { id: 'mode', label: 'Forme', type: 'select', def: 'explosion', options: { explosion: 'Explosion (zone)', contact: 'Impact (une cible)', dissipation: 'Dissipation douce' } },
+      ],
+      appliquer(e, p, ctx) {
+        const m = e.matiere?.masse || 0, c = e.matiere ? M.MATERIAUX[e.matiere.type].c : 0;
+        const th = m * c * Math.abs(e.T - AMBIANTE), ci = e.lance ? 0.5 * m * e.v ** 2 : 0, el = e.charge;
+        e.livraison = { thermique: th, cinetique: ci, electrique: el, total: th + ci + el, mode: p.mode, forme: e.forme, fragments: e.fragments };
+        e.libere = true;
+        e.tempsCharge ??= e.t;
+        if (!e.lance && e.ancre !== 'distance' && p.mode !== 'dissipation' && th + ci + el > 1000)
+          ctx.alerte('danger', `La libération a lieu ${e.ancre === 'main' ? 'dans ta main' : 'à un mètre de toi'} : tu encaisses ${M.formatEnergie(th + ci + el)}.`);
+        if (e.fragments > 1 && e.livraison.total > 0) ctx.alerte('info', `${e.fragments} impacts d'environ ${M.formatEnergie(e.livraison.total / e.fragments)} chacun.`);
+        if (e.piege) ctx.alerte('info', `Se déclenche ${({ duree: 'après le délai', contact: 'au contact', proximite: 'à l\'approche d\'un être vivant', mot: 'sur le mot de commande' })[e.piege]}.`);
+        e.entretiens = {};
+      },
+    },
+
+    /* ===================== MATIÈRE ===================== */
+    rassembler: {
+      fam: 'matiere', nom: 'Rassembler la matière', ecole: 'Fondation', nature: 'inspire', couleur: '#a3a08a',
+      description: 'Attirer et condenser de la matière ambiante au point d\'ancrage (air, eau d\'une source, pierre du sol, bois, charbon…). Loi inventée : 300 J par kilogramme.',
+      formule: 'E = m · 300 J/kg',
+      params: [
+        { id: 'matiere', label: 'Matière', type: 'select', def: 'air', options: Object.fromEntries(['air', 'eau', 'pierre', 'bois', 'charbon', 'fer', 'huile'].map((k) => [k, nomMat(k)])) },
+        { id: 'masse', label: 'Masse', unite: 'kg', def: 1, min: 0.001, step: 0.1 },
+      ],
+      appliquer(e, p, ctx) {
+        if (e.matiere && famille(e.matiere.type) !== famille(p.matiere)) ctx.alerte('attention', `La matière déjà présente (${nomMat(e.matiere.type).toLowerCase()}) est remplacée.`);
+        nouvelleMatiere(e, p.matiere, p.masse);
+        ctx.energie(p.masse * 300);
+        ctx.mental(0.2 + 0.05 * p.masse);
+      },
+    },
+    condenser: {
+      fam: 'matiere', nom: 'Condenser l\'humidité', ecole: 'Hydromancie', nature: 'rigoureux', couleur: '#5fa8d3',
+      description: 'Extraire l\'eau contenue dans l\'air (environ 10 g par m³). Il faut évacuer la chaleur latente de condensation : faire apparaître de l\'eau dans un désert coûte cher.',
+      formule: 'E = m · (2 257 kJ/kg + 30 kJ/kg)',
+      params: [{ id: 'masse', label: 'Masse d\'eau', unite: 'g', def: 300, min: 1, step: 10 }],
+      appliquer(e, p, ctx) {
+        const kg = p.masse / 1000;
+        nouvelleMatiere(e, 'eau', kg);
+        ctx.energie(kg * (2257e3 + 30e3));
+        ctx.alerte('info', `Environ ${M.formatNombre(kg * 100, 0)} m³ d'air sont asséchés autour du point d'ancrage.`);
+        ctx.mental(0.3 + 0.5 * kg);
+      },
+    },
+    creer: {
+      fam: 'matiere', nom: 'Créer la matière', ecole: 'Genèse', nature: 'rigoureux', couleur: '#c79bf0',
+      description: 'Faire apparaître de la matière ex nihilo. Relativité stricte : un gramme coûte autant qu\'une bombe atomique.',
+      formule: 'E = m · c²',
+      params: [
+        { id: 'matiere', label: 'Matière', type: 'select', def: 'eau', options: opts(M.MATERIAUX) },
+        { id: 'masse', label: 'Masse', unite: 'g', def: 1, min: 0, step: 0.1 },
+      ],
+      appliquer(e, p, ctx) {
+        const kg = p.masse / 1000;
+        nouvelleMatiere(e, p.matiere, kg);
+        ctx.energie(kg * M.C * M.C);
+        ctx.mental(0.3);
+      },
+    },
+    etat: {
+      fam: 'matiere', nom: 'Changer d\'état', ecole: 'Transmutation', nature: 'rigoureux', couleur: '#5fa8d3',
+      description: 'Faire fondre, geler, vaporiser ou condenser la matière. Il faut d\'abord l\'amener à son point de changement d\'état ; la température reste fixe pendant la transformation.',
+      formule: 'E = m · L   ·   durée = m · L / P',
+      params: [
+        { id: 'transition', label: 'Transformation', type: 'select', def: 'solidifier', options: { fondre: 'Fondre (solide → liquide)', solidifier: 'Geler / solidifier (liquide → solide)', vaporiser: 'Vaporiser (liquide → gaz)', condenser: 'Condenser (gaz → liquide)' } },
+        { id: 'puissance', label: 'Puissance', unite: 'kW', def: 20, min: 0.001, step: 5 },
+      ],
+      appliquer(e, p, ctx) {
+        if (!e.matiere) { ctx.alerte('danger', 'Aucune matière à transformer.'); return; }
+        const def = { fondre: ['solide', 'liquide', 'fusion'], solidifier: ['liquide', 'solide', 'fusion'], vaporiser: ['liquide', 'gaz', 'ebullition'], condenser: ['gaz', 'liquide', 'ebullition'] }[p.transition];
+        const tr = TRANSITIONS[famille(e.matiere.type)]?.[def[2]];
+        const ph = phaseDe(e.matiere);
+        if (!tr) { ctx.alerte('danger', `${nomMat(e.matiere.type)} ne connaît pas cette transformation (elle brûle ou se décompose avant).`); return; }
+        if (ph !== def[0]) { ctx.alerte('danger', `La matière est ${ph}, pas ${def[0]} : transformation impossible.`); return; }
+        if (Math.abs(e.T - tr.T) > 2) { ctx.alerte('danger', `Il faut d'abord porter la matière à ${M.formatNombre(tr.T, 0)} °C (elle est à ${M.formatNombre(e.T, 0)} °C). Ajoute un bloc « Chauffer / refroidir » avant.`); return; }
+        const E = e.matiere.masse * tr.L;
+        const t = E / (p.puissance * 1000);
+        ctx.energie(E);
+        ctx.evoluer(t, 0, { fixe: true });
+        changerPhase(e.matiere, def[1]);
+        e.T = tr.T;
+        ctx.alerte('info', `${M.formatEnergie(E)} de chaleur latente ${def[1] === 'solide' || (def[0] === 'gaz') ? 'extraits' : 'apportés'} en ${M.formatNombre(t, 1)} s : la matière est maintenant ${def[1]}.`);
+      },
+    },
+    faconner: {
+      fam: 'matiere', nom: 'Façonner', ecole: 'Transmutation', nature: 'inspire', couleur: '#a3a08a',
+      description: 'Donne une forme à la matière. Les formes étalées offrent plus de surface : elles perdent leur chaleur plus vite mais couvrent une zone plus large.',
+      formule: 'E = 50 J/kg   ·   pertes × facteur de forme',
+      params: [{ id: 'forme', label: 'Forme', type: 'select', def: 'lance', options: opts(FORMES) }],
+      appliquer(e, p, ctx) {
+        if (!e.matiere) ctx.alerte('attention', 'Il n\'y a pas encore de matière à façonner.');
+        e.forme = p.forme;
+        ctx.energie(50 * Math.max(0.1, e.matiere?.masse || 0.1));
+        ctx.mental(0.2);
+      },
+    },
+    fragmenter: {
+      fam: 'matiere', nom: 'Fragmenter', ecole: 'Transmutation', nature: 'rigoureux', couleur: '#a3a08a',
+      description: 'Divise la matière en plusieurs projectiles. Plus de fragments, c\'est plus de surface totale : la chaleur s\'échappe plus vite (×N^⅓).',
+      formule: 'E = 20 J par fragment   ·   pertes × N^(1/3)',
+      params: [{ id: 'nombre', label: 'Nombre de fragments', def: 8, min: 2, step: 1 }],
+      appliquer(e, p, ctx) {
+        if (!e.matiere) { ctx.alerte('danger', 'Rien à fragmenter.'); return; }
+        e.fragments = Math.max(1, Math.round(e.fragments * p.nombre));
+        ctx.energie(20 * p.nombre);
+        ctx.mental(0.2);
+        if (e.lance) ctx.alerte('info', 'Fragmentation en vol : le sort éclate en gerbe.');
+      },
+    },
+    compresser: {
+      fam: 'matiere', nom: 'Compresser', ecole: 'Kinésie', nature: 'rigoureux', couleur: '#a3a08a',
+      description: 'Comprime un gaz confiné. Compression adiabatique réelle : le gaz s\'échauffe tout seul, et l\'énergie de compression est restituée à la libération.',
+      formule: 'T₂ = T₁ · r^0,4   ·   E = m · c_v · (T₂ − T₁)',
+      params: [{ id: 'ratio', label: 'Rapport de compression', unite: '×', def: 10, min: 1.1, step: 1 }],
+      appliquer(e, p, ctx) {
+        if (!e.matiere || phaseDe(e.matiere) !== 'gaz') { ctx.alerte('danger', 'Seul un gaz se comprime. Rassemble de l\'air ou vaporise de l\'eau.'); return; }
+        if (!e.confine) { ctx.alerte('danger', 'Sans confinement, le gaz comprimé s\'échappe aussitôt. Ajoute un « Confinement » avant.'); return; }
+        const T1 = e.T + 273.15, T2 = T1 * p.ratio ** 0.4;
+        const W = e.matiere.masse * (M.MATERIAUX[e.matiere.type].c / 1.4) * (T2 - T1);
+        e.pression *= p.ratio ** 1.4;
+        e.T = T2 - 273.15;
+        ctx.energie(W);
+        ctx.mental(0.3);
+        ctx.alerte('info', `Le gaz monte à ${M.formatNombre(e.T, 0)} °C sous ~${M.formatNombre(e.pression, 0)} atm.`);
+      },
+    },
+
+    /* ===================== ÉNERGIE ===================== */
+    chaleur: {
+      fam: 'energie', nom: 'Chauffer / refroidir', ecole: 'Pyromancie / Cryomancie', nature: 'rigoureux', couleur: '#e8904e',
+      description: 'Injecte (ou retire) de la chaleur à une puissance donnée jusqu\'à la température voulue. Le temps dépend des pertes, et la matière s\'arrête à ses points de fusion ou d\'ébullition.',
+      formule: 'm·c·dT/dt = ±P − h·(T − T_amb)',
+      params: [
+        { id: 'puissance', label: 'Puissance', unite: 'kW', def: 200, min: 0.001, step: 10 },
+        { id: 'cible', label: 'Température visée', unite: '°C', def: 800, step: 50 },
+      ],
+      appliquer(e, p, ctx) {
+        if (!e.matiere) { ctx.alerte('danger', 'Rien à chauffer : la chaleur se dissipe dans le vide. Ajoute de la matière avant.'); return; }
+        const P = p.puissance * 1000;
+        const m = e.matiere.masse, c = M.MATERIAUX[e.matiere.type].c;
+        const h = ctx.pertes(), tau = (m * c) / h;
+        const T0 = e.T;
+        let Tc = p.cible;
+        if (Math.abs(Tc - T0) < 0.5) { ctx.alerte('info', 'La matière est déjà à cette température.'); return; }
+        const s = Math.sign(Tc - T0);
+        const b = barriere(e, s);
+        if (b && (s > 0 ? Tc > b.T : Tc < b.T)) {
+          ctx.alerte('attention', `La matière s'arrête à ${M.formatNombre(b.T, 0)} °C, son point ${b.txt}. Ajoute « Changer d'état » pour aller plus loin.`);
+          Tc = b.T;
+        }
+        if (Math.abs(Tc - T0) < 0.5) return;
+        const Teq = AMBIANTE + (s * P) / h;
+        let t;
+        if ((s > 0 && Tc >= Teq) || (s < 0 && Tc <= Teq)) {
+          t = tau * Math.log(20);
+          ctx.alerte('attention', `Puissance insuffisante : les pertes égalent la puissance vers ${M.formatNombre(Teq, 0)} °C. Augmente la puissance ou ajoute un confinement.`);
+        } else t = tau * Math.log((T0 - Teq) / (Tc - Teq));
+        ctx.energie(P * t);
+        ctx.evoluer(t, s * P, { plafond: Tc });
+        if (!e.confine && Math.abs(e.T - AMBIANTE) > 200) ctx.alerte('info', `Sans confinement, ${M.formatNombre(h * Math.abs(e.T - AMBIANTE) / 1000, 1)} kW s'échappent en permanence à cette température.`);
+      },
+    },
+    embraser: {
+      fam: 'energie', nom: 'Embraser', ecole: 'Pyromancie', nature: 'rigoureux', couleur: '#e8904e',
+      description: 'Enflamme un combustible (bois, charbon, huile) déjà porté à sa température d\'ignition. La combustion libère son énergie chimique gratuitement — mais elle consomme la matière et a besoin d\'air.',
+      formule: 'Q = fraction · m · PCI   (bois 15, charbon 30, huile 42 MJ/kg)',
+      params: [
+        { id: 'fraction', label: 'Part brûlée', unite: '%', def: 50, min: 1, step: 5 },
+        { id: 'duree', label: 'Durée de combustion', unite: 's', def: 3, min: 0.1, step: 0.5 },
+      ],
+      appliquer(e, p, ctx) {
+        const cb = e.matiere && COMBUSTIBLES[e.matiere.type];
+        if (!cb) { ctx.alerte('danger', `${e.matiere ? nomMat(e.matiere.type) : 'Le vide'} ne brûle pas. Rassemble du bois, du charbon ou de l'huile.`); return; }
+        if (e.T < cb.ignition) { ctx.alerte('danger', `Trop froid pour s'enflammer : chauffe d'abord à ${cb.ignition} °C (température d'ignition).`); return; }
+        const frac = Math.min(100, p.fraction) / 100;
+        let Q = frac * e.matiere.masse * cb.pci;
+        if (e.confine) { Q *= 0.3; ctx.alerte('attention', 'La bulle de confinement étouffe la flamme : sans air frais, seuls 30 % du combustible brûlent vraiment.'); }
+        ctx.energie(200);
+        ctx.evoluer(p.duree, Q / p.duree, { plafond: cb.flamme });
+        e.matiere.masse *= 1 - frac * 0.9;
+        majConfinement(e);
+        ctx.alerte('info', `La combustion fournit ${M.formatEnergie(Q)} sans rien coûter au lanceur ; la flamme plafonne vers ${cb.flamme} °C.`);
+      },
+    },
+    charger: {
+      fam: 'energie', nom: 'Charger électriquement', ecole: 'Électromancie', nature: 'mixte', couleur: '#e0d35a',
+      description: 'Accumule une charge électrique dans le sort (rendement 80 %). La charge fuit en permanence et doit être entretenue ; tenue dans la main sans protection, elle électrocute le lanceur.',
+      formule: 'E = charge / 0,8   ·   entretien = 2 % de la charge par seconde',
+      params: [{ id: 'charge', label: 'Énergie stockée', unite: 'kJ', def: 50, min: 0.001, step: 5 }],
+      appliquer(e, p, ctx) {
+        const J = p.charge * 1000;
+        e.charge += J;
+        e.entretiens.charge = 0.02 * e.charge;
+        ctx.energie(J / 0.8);
+        ctx.mental(0.2);
+      },
+    },
+    illuminer: {
+      fam: 'energie', nom: 'Illuminer', ecole: 'Lumen', nature: 'rigoureux', couleur: '#f1e3a3',
+      description: 'Le sort émet de la lumière tant qu\'il existe (y compris en vol). Pratique pour éclairer, ou pour aveugler à l\'impact.',
+      formule: 'entretien = P lumineuse',
+      params: [{ id: 'puissance', label: 'Intensité', type: 'select', def: '10', options: { '1': 'Bougie (1 W)', '10': 'Torche (10 W)', '60': 'Lanterne (60 W)', '1000': 'Projecteur (1 kW)', '100000': 'Aveuglant (100 kW)' } }],
+      appliquer(e, p, ctx) {
+        e.lumiere = Number(p.puissance);
+        e.entretiens.lumiere = e.lumiere;
+        if (e.cache) ctx.alerte('attention', 'Un sort dissimulé qui brille… se voit quand même.');
+        ctx.energie(10);
+        ctx.mental(0.1);
+      },
+    },
+    onde: {
+      fam: 'energie', nom: 'Onde de choc', ecole: 'Kinésie', nature: 'mixte', couleur: '#62d6c6',
+      description: 'Une poussée d\'air brutale émise depuis la position du sort (rendement 50 %). Émise près de soi sans bouclier cinétique, elle frappe aussi le lanceur.',
+      formule: 'E = énergie de l\'onde / 0,5',
+      params: [{ id: 'energie', label: 'Énergie de l\'onde', unite: 'kJ', def: 20, min: 0.001, step: 5 }],
+      appliquer(e, p, ctx) {
+        const J = p.energie * 1000;
+        ctx.energie(J / 0.5);
+        if (!e.lance && e.ancre !== 'distance' && e.bouclier < J)
+          ctx.alerte('danger', `Tu es au centre de l'onde : ${M.formatEnergie(J)} te frappent${e.bouclier ? ` (ton bouclier n'en arrête que ${M.formatEnergie(e.bouclier)})` : '. Ajoute un « Bouclier cinétique » avant'}.`);
+        else ctx.alerte('info', `Repousse tout ce qui entoure le sort avec ${M.formatEnergie(J)}.`);
+        ctx.mental(0.1);
+      },
+    },
+    effet: {
+      fam: 'energie', nom: 'Effet direct', ecole: 'Toutes', nature: 'mixte', couleur: '#d6a95e',
+      description: 'Un effet élémentaire appliqué d\'un coup au point d\'ancrage (lumière, soin, foudre, bouclier…), pour ce qui ne demande pas de construction pas à pas.',
+      params: [{ id: 'effet', label: 'Effet', type: 'select', def: 'lumiere', options: opts(M.EFFETS) }],
+      appliquer(e, p, ctx) {
+        ctx.energie(M.energieComposante({ type: p.effet, params: p }));
+        ctx.mental(0.2);
+      },
+    },
+
+    /* ===================== MOUVEMENT ===================== */
     mouvement: {
-      nom: 'Imprégner de mouvement', ecole: 'Kinésie', nature: 'rigoureux', couleur: '#62d6c6',
-      description: 'Donne une vitesse à la matière et l\'envoie vers la cible. Le sort quitte le lanceur : la protection se relâche. Pendant le vol, la chaleur continue de s\'échapper.',
+      fam: 'mouvement', nom: 'Imprégner de mouvement', ecole: 'Kinésie', nature: 'rigoureux', couleur: '#62d6c6',
+      description: 'Donne une vitesse à la matière et l\'envoie vers la cible. Le sort quitte le lanceur : les protections se relâchent. Pendant le vol, la chaleur continue de s\'échapper.',
       formule: 'E = ½ · m · v²   ·   vol = d / v',
       params: [
         { id: 'vitesse', label: 'Vitesse', unite: 'm/s', def: 25, min: 0.1 },
@@ -154,43 +399,141 @@ const Blueprint = (() => {
         if (!e.matiere) { ctx.alerte('danger', 'Il n\'y a aucune matière à mettre en mouvement.'); return; }
         if (e.lance) { ctx.alerte('danger', 'Le sort est déjà lancé.'); return; }
         ctx.energie(0.5 * e.matiere.masse * p.vitesse ** 2);
-        e.lance = true; e.v = p.vitesse; e.distanceVol = p.distance;
-        e.tempsCharge = e.t;
-        if (e.entretiens.protection) { ctx.alerte('info', `Le sort quitte ${e.ancre === 'main' ? 'ta main' : 'le lanceur'} : la protection se relâche.`); e.entretiens.protection = 0; }
+        ctx.lancer(p.distance);
+        e.v = p.vitesse;
+        if (p.distance > 30 && !e.vise && !e.guide) ctx.alerte('attention', 'À plus de 30 m sans « Viser » ni « Guidage », le projectile a de bonnes chances de manquer.');
         const T0 = e.T;
         ctx.evoluer(p.distance / p.vitesse);
-        const fluide = ['air', 'eau'].includes(e.matiere.type);
-        if (!e.confine && Math.abs(T0 - AMBIANTE) > 100 && !fluide)
-          ctx.alerte('info', `La matière refroidit pendant le vol : ${M.formatNombre(T0, 0)} °C au départ, ${M.formatNombre(e.T, 0)} °C à l'impact (après ${M.formatNombre(p.distance / p.vitesse, 2)} s).`);
-        else if (!e.confine && Math.abs(T0 - AMBIANTE) > 100)
+        const fluide = ['air', 'vapeur', 'eau'].includes(e.matiere.type);
+        if (!e.confine && Math.abs(T0 - AMBIANTE) > 100 && fluide)
           ctx.alerte('attention', `Sans confinement, la masse se disperse en vol : elle arrive à ${M.formatNombre(e.T, 0)} °C au lieu de ${M.formatNombre(T0, 0)} °C.`);
-        else ctx.alerte('info', `Impact après ${M.formatNombre(p.distance / p.vitesse, 2)} s de vol, à ${M.formatNombre(e.T, 0)} °C.`);
+        else if (Math.abs(T0 - e.T) > 20)
+          ctx.alerte('info', `La matière refroidit pendant le vol : ${M.formatNombre(T0, 0)} °C au départ, ${M.formatNombre(e.T, 0)} °C à l'impact (après ${M.formatNombre(p.distance / p.vitesse, 2)} s).`);
+        else ctx.alerte('info', `Impact après ${M.formatNombre(p.distance / p.vitesse, 2)} s de vol.`);
       },
     },
-    liberation: {
-      nom: 'Libération', ecole: 'Fondation', nature: 'rigoureux', couleur: '#e2565a',
-      description: 'Relâche toute l\'énergie contenue dans le sort : le confinement se rompt, la chaleur et le mouvement se déchargent sur la cible.',
-      formule: 'E délivrée = m·c·|T − T_amb| + ½·m·v²',
+    teleporter: {
+      fam: 'mouvement', nom: 'Projeter par translocation', ecole: 'Translocation', nature: 'inspire', couleur: '#62d6c6',
+      description: 'Le sort disparaît et réapparaît sur la cible, sans vol : il ne refroidit pas en route et ne peut pas être esquivé. Loi inventée : 50 J par kilogramme et par mètre.',
+      formule: 'E = m · d · 50',
+      params: [{ id: 'distance', label: 'Distance de la cible', unite: 'm', def: 20, min: 0 }],
+      appliquer(e, p, ctx) {
+        if (e.lance) { ctx.alerte('danger', 'Le sort est déjà lancé.'); return; }
+        const m = Math.max(0.1, e.matiere?.masse || 0.1);
+        ctx.energie(m * p.distance * 50);
+        ctx.lancer(p.distance);
+        e.v = 0;
+        ctx.mental(0.1);
+        ctx.alerte('info', `Le sort réapparaît instantanément à ${p.distance} m, sans perte en vol.`);
+      },
+    },
+    leviter: {
+      fam: 'mouvement', nom: 'Faire léviter', ecole: 'Kinésie', nature: 'mixte', couleur: '#62d6c6',
+      description: 'Maintient le sort en suspension sans le tenir (utile s\'il est ancré devant soi ou à distance). S\'entretient jusqu\'au lancement.',
+      formule: 'entretien = m · g · 1 m/s',
+      params: [],
+      appliquer(e, p, ctx) {
+        if (e.ancre === 'main') ctx.alerte('info', 'Dans la main, la lévitation ne sert pas à grand-chose.');
+        e.levite = true;
+        majConfinement(e);
+        ctx.energie(20);
+        ctx.mental(0.1);
+      },
+    },
+
+    /* ===================== PROTECTION ===================== */
+    protection: {
+      fam: 'protection', nom: 'Protection thermique', ecole: 'Abjuration', nature: 'inspire', couleur: '#6fa8e8',
+      description: 'Protège la main et le corps du lanceur jusqu\'à une température donnée (chaud comme froid). Elle s\'entretient tant que le sort reste près du lanceur.',
+      formule: 'mise en place = 2 J/°C   ·   entretien = 0,002 · seuil² W',
+      params: [{ id: 'seuil', label: 'Supporte jusqu\'à', type: 'select', def: '1000', options: { '200': '± 200 °C', '500': '± 500 °C', '1000': '± 1 000 °C', '2000': '± 2 000 °C', '3500': '± 3 500 °C' } }],
+      appliquer(e, p, ctx) {
+        const s = Number(p.seuil);
+        if (e.ancre === 'distance') ctx.alerte('info', 'Le sort est ancré loin de toi : cette protection ne sert pas à grand-chose.');
+        e.protection = Math.max(e.protection, s);
+        e.entretiens.protection = 0.002 * e.protection ** 2;
+        ctx.energie(2 * s, { sansDistance: true });
+        ctx.mental(0.2);
+      },
+    },
+    protelec: {
+      fam: 'protection', nom: 'Isolation électrique', ecole: 'Abjuration', nature: 'inspire', couleur: '#6fa8e8',
+      description: 'Isole le lanceur de la charge qu\'il manipule. Indispensable avant de charger un sort tenu en main.',
+      formule: 'mise en place = 50 J + 0,05 % du seuil   ·   entretien = 5 · log₁₀(seuil)² W',
+      params: [{ id: 'seuil', label: 'Supporte jusqu\'à', type: 'select', def: '100000', options: { '1000': '1 kJ (étincelle)', '100000': '100 kJ (arc)', '10000000': '10 MJ (éclair mineur)', '1000000000': '1 GJ (foudre)' } }],
+      appliquer(e, p, ctx) {
+        const s = Number(p.seuil);
+        e.protElec = Math.max(e.protElec, s);
+        e.entretiens.protElec = 5 * Math.log10(e.protElec) ** 2;
+        ctx.energie(50 + 0.0005 * s, { sansDistance: true });
+        ctx.mental(0.2);
+      },
+    },
+    bouclier: {
+      fam: 'protection', nom: 'Bouclier cinétique', ecole: 'Abjuration', nature: 'mixte', couleur: '#6fa8e8',
+      description: 'Un champ devant le lanceur qui absorbe l\'énergie des coups (et de ses propres ondes de choc). Il faut stocker l\'énergie à absorber et entretenir la surface.',
+      formule: 'E = capacité   ·   entretien = S · 5 W/m²',
       params: [
-        { id: 'mode', label: 'Forme', type: 'select', def: 'explosion', options: { explosion: 'Explosion (zone)', contact: 'Impact (une cible)', dissipation: 'Dissipation douce' } },
+        { id: 'capacite', label: 'Énergie absorbable', type: 'select', def: '3000', options: { '100': 'Flèche (100 J)', '500': 'Coup d\'épée (500 J)', '3000': 'Balle de mousquet (3 kJ)', '50000': 'Charge de cavalerie (50 kJ)', '1000000': 'Boulet de canon (1 MJ)' } },
+        { id: 'surface', label: 'Surface', unite: 'm²', def: 2, min: 0.1, step: 0.5 },
       ],
       appliquer(e, p, ctx) {
-        const m = e.matiere?.masse || 0, c = e.matiere ? M.MATERIAUX[e.matiere.type].c : 0;
-        const th = m * c * Math.abs(e.T - AMBIANTE), ci = e.lance ? 0.5 * m * e.v ** 2 : 0;
-        e.livraison = { thermique: th, cinetique: ci, total: th + ci, mode: p.mode };
-        e.libere = true;
-        if (!e.lance) e.tempsCharge = e.t;
-        if (!e.lance && e.ancre !== 'distance' && p.mode !== 'dissipation' && th + ci > 1000)
-          ctx.alerte('danger', `La libération a lieu ${e.ancre === 'main' ? 'dans ta main' : 'à un mètre de toi'} : tu encaisses ${M.formatEnergie(th + ci)}.`);
-        e.entretiens = {};
+        e.bouclier = Math.max(e.bouclier, Number(p.capacite));
+        e.entretiens.bouclier = p.surface * 5;
+        ctx.energie(Number(p.capacite), { sansDistance: true });
+        ctx.mental(0.2);
       },
     },
-    effet: {
-      nom: 'Effet direct', ecole: 'Toutes', nature: 'mixte', couleur: '#d6a95e',
-      description: 'Un effet élémentaire appliqué d\'un coup au point d\'ancrage (lumière, soin, foudre, bouclier…), pour ce qui ne demande pas de construction pas à pas.',
-      params: [{ id: 'effet', label: 'Effet', type: 'select', def: 'lumiere', options: opts(M.EFFETS) }],
+    confinement: {
+      fam: 'protection', nom: 'Confinement', ecole: 'Abjuration', nature: 'inspire', couleur: '#6fa8e8',
+      description: 'Enferme la matière dans une bulle de force : la chaleur ne s\'échappe presque plus et la masse ne se disperse pas en vol. S\'entretient en continu.',
+      formule: 'mise en place = 100 J   ·   entretien = 500 W/kg',
+      params: [],
       appliquer(e, p, ctx) {
-        ctx.energie(M.energieComposante({ type: p.effet, params: p }));
+        if (!e.matiere) ctx.alerte('attention', 'Rien à contenir : ajoute de la matière avant.');
+        e.confine = true;
+        majConfinement(e);
+        if (!e.matiere) e.entretiens.confinement = 50;
+        ctx.energie(100);
+        ctx.mental(0.2);
+      },
+    },
+
+    /* ===================== CONTRÔLE & PERCEPTION ===================== */
+    viser: {
+      fam: 'controle', nom: 'Viser', ecole: 'Divination', nature: 'inspire', couleur: '#b08be0',
+      description: 'Verrouille mentalement la cible avant le lancement. Indispensable pour toucher loin.',
+      formule: 'E = 20 J',
+      params: [],
+      appliquer(e, p, ctx) {
+        if (e.lance) ctx.alerte('attention', 'Viser après avoir lancé ne sert à rien.');
+        e.vise = true;
+        ctx.energie(20);
+        ctx.mental(0.3);
+      },
+    },
+    guidage: {
+      fam: 'controle', nom: 'Guidage', ecole: 'Divination', nature: 'inspire', couleur: '#b08be0',
+      description: 'Le lanceur corrige la trajectoire en vol : le projectile suit sa cible même si elle bouge. S\'entretient pendant le vol.',
+      formule: 'mise en place = 100 J   ·   entretien = 300 W',
+      params: [],
+      appliquer(e, p, ctx) {
+        e.guide = true;
+        e.entretiens.guidage = 300;
+        ctx.energie(100);
+        ctx.mental(0.1);
+      },
+    },
+    dissimuler: {
+      fam: 'controle', nom: 'Dissimuler', ecole: 'Illusion', nature: 'inspire', couleur: '#b08be0',
+      description: 'Courbe la lumière autour du sort pour le rendre invisible. La cible ne voit rien venir. S\'entretient tant que le sort existe.',
+      formule: 'entretien = 200 W/kg',
+      params: [],
+      appliquer(e, p, ctx) {
+        e.cache = true;
+        majConfinement(e);
+        if (e.lumiere) ctx.alerte('attention', 'Le sort brille déjà : la dissimulation sera trahie par sa lumière.');
+        ctx.energie(50);
         ctx.mental(0.2);
       },
     },
@@ -219,11 +562,16 @@ const Blueprint = (() => {
     return b;
   }
 
+  // Entretiens liés au lanceur (s'arrêtent au lancement) / liés au sort (continuent en vol)
+  const ENTRETIENS_LANCEUR = ['protection', 'protElec', 'bouclier', 'levitation'];
+
   // --- Simulation ----------------------------------------------------------
   function simuler(sort, R = M.reglages()) {
     const e = {
       t: 0, ancre: null, facteurDistance: 1, matiere: null, T: AMBIANTE,
-      confine: false, protection: 0, lance: false, v: 0, distanceVol: 0, libere: false,
+      confine: false, protection: 0, protElec: 0, bouclier: 0, lance: false, v: 0, distanceVol: 0, libere: false,
+      forme: 'sphere', fragments: 1, charge: 0, pression: 1, lumiere: 0,
+      vise: false, guide: false, cache: false, levite: false, piege: null,
       entretiens: {}, tempsCharge: null, livraison: null,
     };
     const courbe = [{ t: 0, T: AMBIANTE }];
@@ -233,7 +581,7 @@ const Blueprint = (() => {
     for (const [i, bloc] of (sort.blocs || []).entries()) {
       const def = BLOCS[bloc.type];
       const etape = { index: i, type: bloc.type, energie: 0, duree: 0, alertes: [], debut: e.t };
-      const dejaBrule = new Set();
+      const signale = new Set();
 
       const ctx = {
         R,
@@ -246,44 +594,75 @@ const Blueprint = (() => {
         pertes() {
           const m = e.matiere?.masse || 0.1;
           const k = e.confine ? 1 : 25;
+          const forme = e.confine ? 1 : FORMES[e.forme]?.pertes ?? 1;
           const vol = e.lance && !e.libere ? 1 + e.v / 5 : 1; // convection forcée en vol
-          return k * m ** (2 / 3) * vol;
+          return k * m ** (2 / 3) * forme * e.fragments ** (1 / 3) * vol;
         },
-        // Opération mentale : durée de base × réglage de table
+        puissanceEntretien() {
+          return Object.entries(e.entretiens).reduce((s, [k, w]) => s + (e.lance && ENTRETIENS_LANCEUR.includes(k) ? 0 : w), 0);
+        },
+        lancer(distance) {
+          e.lance = true; e.distanceVol = distance; e.tempsCharge ??= e.t;
+          const relaches = ENTRETIENS_LANCEUR.filter((k) => e.entretiens[k]);
+          if (relaches.some((k) => k !== 'levitation')) ctx.alerte('info', `Le sort quitte ${e.ancre === 'main' ? 'ta main' : 'le lanceur'} : les protections se relâchent.`);
+          for (const k of relaches) delete e.entretiens[k];
+        },
         mental(dt) { ctx.evoluer(dt * (R.dureeMentale ?? 1)); },
         // Fait passer dt secondes avec une puissance nette P (W) injectée dans la matière
-        evoluer(dt, P = 0) {
+        evoluer(dt, P = 0, o = {}) {
           if (!(dt > 0)) return;
           const h = ctx.pertes();
           const m = e.matiere?.masse, c = e.matiere ? M.MATERIAUX[e.matiere.type].c : 0;
           const T0 = e.T, Teq = AMBIANTE + P / h, tau = m ? (m * c) / h : 1;
-          const n = Math.max(2, Math.min(40, Math.ceil(dt / tau * 8)));
+          // bornes : point de changement d'état, plafond imposé (flamme, cible)
+          const sens = Math.sign(Teq - T0);
+          const b = o.fixe ? null : barriere(e, sens);
+          let borne = b ? b.T : null;
+          if (o.plafond !== undefined && sens > 0) borne = borne === null ? o.plafond : Math.min(borne, o.plafond);
+          if (o.plafond !== undefined && sens < 0) borne = borne === null ? o.plafond : Math.max(borne, o.plafond);
+          const borner = (T) => (borne === null ? T : sens > 0 ? Math.min(T, borne) : Math.max(T, borne));
+          const n = Math.max(2, Math.min(40, Math.ceil((dt / tau) * 8)));
           for (let k = 1; k <= n; k++) {
             const tk = (dt * k) / n;
-            const T = m ? Teq + (T0 - Teq) * Math.exp(-tk / tau) : AMBIANTE;
+            const T = !m ? AMBIANTE : o.fixe ? T0 : borner(Teq + (T0 - Teq) * Math.exp(-tk / tau));
             courbe.push({ t: e.t + tk, T });
             verifierCorps(T);
           }
-          if (m) e.T = Teq + (T0 - Teq) * Math.exp(-dt / tau);
-          // entretiens (protection, confinement)
+          if (m && !o.fixe) {
+            const Tf = Teq + (T0 - Teq) * Math.exp(-dt / tau);
+            e.T = borner(Tf);
+            if (b && e.T === b.T && Tf !== e.T && P === 0) ctx.alerte('info', `La matière se stabilise à ${M.formatNombre(b.T, 0)} °C, son point ${b.txt}.`);
+          }
+          // entretiens
           const fVol = e.lance ? ((1 + e.distanceVol / R.porteeRef) ** 2 + 1) / 2 : e.facteurDistance;
-          const ent = (e.entretiens.protection || 0) + (e.entretiens.confinement || 0) * fVol;
+          let ent = 0;
+          for (const [k, w] of Object.entries(e.entretiens)) {
+            if (ENTRETIENS_LANCEUR.includes(k)) ent += e.lance ? 0 : w;
+            else ent += w * fVol;
+          }
           etape.energie += ent * dt; eEntretien += ent * dt;
           e.t += dt; etape.duree += dt;
         },
       };
 
       function verifierCorps(T) {
-        if (e.lance || e.libere || !e.ancre || e.ancre === 'distance' || !e.matiere) return;
-        const tol = TOLERANCE[e.ancre];
-        const haut = Math.max(tol.haut, e.protection), bas = Math.min(tol.bas, -e.protection);
-        if (T > haut && !dejaBrule.has('chaud')) {
-          dejaBrule.add('chaud');
-          ctx.alerte('danger', `Brûlure : ${e.ancre === 'main' ? 'ta main' : 'ton corps'} supporte ${haut} °C, le sort dépasse cette température.${e.protection ? '' : ' Ajoute une protection thermique avant de chauffer.'}`);
+        if (e.lance || e.libere || !e.ancre || e.ancre === 'distance') return;
+        const qui = e.ancre === 'main' ? 'ta main' : 'ton corps';
+        if (e.matiere) {
+          const tol = TOLERANCE[e.ancre];
+          const haut = Math.max(tol.haut, e.protection), bas = Math.min(tol.bas, -e.protection);
+          if (T > haut && !signale.has('chaud')) {
+            signale.add('chaud');
+            ctx.alerte('danger', `Brûlure : ${qui} supporte ${haut} °C, le sort dépasse cette température.${e.protection ? ' Augmente la protection thermique.' : ' Ajoute une protection thermique avant de chauffer.'}`);
+          }
+          if (T < bas && !signale.has('froid')) {
+            signale.add('froid');
+            ctx.alerte('danger', `Gelure : ${qui} supporte ${bas} °C, le sort descend plus bas.${e.protection ? ' Augmente la protection thermique.' : ' Ajoute une protection thermique.'}`);
+          }
         }
-        if (T < bas && !dejaBrule.has('froid')) {
-          dejaBrule.add('froid');
-          ctx.alerte('danger', `Gelure : ${e.ancre === 'main' ? 'ta main' : 'ton corps'} supporte ${bas} °C, le sort descend plus bas.${e.protection ? '' : ' Ajoute une protection thermique.'}`);
+        if (e.charge > 10 && e.protElec < e.charge && !signale.has('elec')) {
+          signale.add('elec');
+          ctx.alerte('danger', `Électrocution : ${qui} reçoit la charge du sort (${M.formatEnergie(e.charge)}).${e.protElec ? ' L\'isolation est trop faible.' : ' Ajoute une « Isolation électrique » avant de charger.'}`);
         }
       }
 
@@ -296,20 +675,20 @@ const Blueprint = (() => {
       }
       etape.etat = {
         t: e.t, T: e.T, matiere: e.matiere ? { ...e.matiere } : null, confine: e.confine,
-        protection: e.protection, lance: e.lance, libere: e.libere, v: e.v,
+        protection: e.protection, protElec: e.protElec, bouclier: e.bouclier, lance: e.lance, libere: e.libere, v: e.v,
+        forme: e.forme, fragments: e.fragments, charge: e.charge, pression: e.pression,
+        vise: e.vise, guide: e.guide, cache: e.cache, lumiere: e.lumiere, levite: e.levite, piege: e.piege,
       };
       etapes.push(etape);
     }
 
-    // Bilan global
     const globales = [];
-    if (e.matiere && !e.libere && Math.abs(e.T - AMBIANTE) > 50)
+    if (!e.libere && ((e.matiere && Math.abs(e.T - AMBIANTE) > 50) || e.charge > 0))
       globales.push({ niv: 'info', txt: 'Le sort n\'est jamais libéré : son énergie se dissipe sans effet. Termine par « Libération ».' });
 
-    const R2 = R;
     const focal = M.FOCALISATEUR[sort.lanceur?.focalisateur]?.f ?? 1;
     const eTotal = (ePonctuelle + eEntretien) * focal;
-    const c = cout(eTotal, sort.lanceur, R2);
+    const c = cout(eTotal, sort.lanceur, R);
     const alertes = etapes.flatMap((s) => s.alertes.map((a) => ({ ...a, etape: s.index }))).concat(globales);
 
     return {
@@ -350,7 +729,7 @@ const Blueprint = (() => {
     return base;
   }
 
-  return { AMBIANTE, TOLERANCE, BLOCS, parametres, valeurs, nouveauBloc, simuler, cout, normaliser };
+  return { AMBIANTE, TOLERANCE, FAMILLES, FORMES, TRANSITIONS, COMBUSTIBLES, BLOCS, parametres, valeurs, nouveauBloc, simuler, cout, normaliser };
 })();
 
 /* --- Blueprints d'exemple -------------------------------------------------- */
@@ -382,6 +761,53 @@ const EXEMPLES = [
     lanceur: { niveau: 'adepte', reserve: null, focalisateur: 'aucun' },
   },
   {
+    id: 'ex-javelot-glace', nom: 'Javelot de glace', ecole: 'Cryomancie',
+    description: 'L\'humidité de l\'air se condense devant le lanceur, gèle en une lance effilée qu\'il refroidit encore avant de la tirer sur sa cible.',
+    blocs: [
+      { type: 'ancrage', params: { lieu: 'devant' } },
+      { type: 'condenser', params: { masse: 300 } },
+      { type: 'chaleur', params: { puissance: 20, cible: 0 } },
+      { type: 'etat', params: { transition: 'solidifier', puissance: 30 } },
+      { type: 'chaleur', params: { puissance: 20, cible: -30 } },
+      { type: 'faconner', params: { forme: 'lance' } },
+      { type: 'viser', params: {} },
+      { type: 'mouvement', params: { vitesse: 60, distance: 35 } },
+      { type: 'liberation', params: { mode: 'contact' } },
+    ],
+    lanceur: { niveau: 'maitre', reserve: null, focalisateur: 'aucun' },
+  },
+  {
+    id: 'ex-boule-foudre', nom: 'Boule de foudre', ecole: 'Électromancie',
+    description: 'Une sphère d\'air ionisé, crépitante et lumineuse, chargée dans la main isolée du lanceur puis guidée jusqu\'à sa cible.',
+    blocs: [
+      { type: 'ancrage', params: { lieu: 'main' } },
+      { type: 'protelec', params: { seuil: '100000' } },
+      { type: 'rassembler', params: { matiere: 'air', masse: 0.5 } },
+      { type: 'confinement', params: {} },
+      { type: 'charger', params: { charge: 50 } },
+      { type: 'illuminer', params: { puissance: '60' } },
+      { type: 'guidage', params: {} },
+      { type: 'mouvement', params: { vitesse: 15, distance: 15 } },
+      { type: 'liberation', params: { mode: 'contact' } },
+    ],
+    lanceur: { niveau: 'maitre', reserve: null, focalisateur: 'ouvrage' },
+  },
+  {
+    id: 'ex-pluie-braises', nom: 'Pluie de braises', ecole: 'Pyromancie',
+    description: 'Du charbon arraché au foyer, porté à ignition puis embrasé : le lanceur le brise en une gerbe de braises qui s\'abat sur la zone.',
+    blocs: [
+      { type: 'ancrage', params: { lieu: 'devant' } },
+      { type: 'protection', params: { seuil: '2000' } },
+      { type: 'rassembler', params: { matiere: 'charbon', masse: 1 } },
+      { type: 'chaleur', params: { puissance: 150, cible: 450 } },
+      { type: 'embraser', params: { fraction: 30, duree: 2 } },
+      { type: 'fragmenter', params: { nombre: 20 } },
+      { type: 'mouvement', params: { vitesse: 20, distance: 15 } },
+      { type: 'liberation', params: { mode: 'explosion' } },
+    ],
+    lanceur: { niveau: 'adepte', reserve: null, focalisateur: 'simple' },
+  },
+  {
     id: 'ex-pierre-ardente', nom: 'Projectile de pierre ardente', ecole: 'Géomancie',
     description: 'Un éclat de pierre arraché au sol, porté au rouge devant le lanceur puis tiré comme une balle.',
     blocs: [
@@ -389,8 +815,23 @@ const EXEMPLES = [
       { type: 'rassembler', params: { matiere: 'pierre', masse: 0.3 } },
       { type: 'protection', params: { seuil: '1000' } },
       { type: 'chaleur', params: { puissance: 50, cible: 700 } },
+      { type: 'faconner', params: { forme: 'lance' } },
       { type: 'mouvement', params: { vitesse: 80, distance: 30 } },
       { type: 'liberation', params: { mode: 'contact' } },
+    ],
+    lanceur: { niveau: 'maitre', reserve: null, focalisateur: 'aucun' },
+  },
+  {
+    id: 'ex-piege-feu', nom: 'Rune de feu (piège)', ecole: 'Pyromancie',
+    description: 'Une bulle d\'air brûlant scellée au sol, invisible, qui explose quand quelqu\'un s\'approche. Le confinement coûte tant qu\'elle attend.',
+    blocs: [
+      { type: 'ancrage', params: { lieu: 'distance', distance: 3 } },
+      { type: 'rassembler', params: { matiere: 'air', masse: 1 } },
+      { type: 'confinement', params: {} },
+      { type: 'chaleur', params: { puissance: 100, cible: 900 } },
+      { type: 'dissimuler', params: {} },
+      { type: 'retardement', params: { declencheur: 'proximite', attente: 120 } },
+      { type: 'liberation', params: { mode: 'explosion' } },
     ],
     lanceur: { niveau: 'maitre', reserve: null, focalisateur: 'aucun' },
   },

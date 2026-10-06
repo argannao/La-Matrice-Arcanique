@@ -66,9 +66,14 @@
   function paletteHTML(index) {
     const n = sort.blocs.length;
     const titre = n === 0 ? 'Commence par un bloc (l\'Ancrage est le point de départ) :' : index >= n ? 'Ajouter un bloc à la fin :' : `Insérer un bloc en position ${index + 1} :`;
-    return `<div class="palette" id="palette"><p>${titre}</p><div class="palette-grille">${
-      Object.entries(B.BLOCS).map(([k, d]) => `<button type="button" data-ajout="${k}" style="--c:${d.couleur}">${echapper(d.nom)}<small>${echapper(d.ecole)}</small></button>`).join('')
-    }</div></div>`;
+    const groupes = Object.entries(B.FAMILLES).map(([fam, nomFam]) => {
+      const blocs = Object.entries(B.BLOCS).filter(([, d]) => d.fam === fam);
+      if (!blocs.length) return '';
+      return `<div class="palette-famille"><h4>${echapper(nomFam)}</h4><div class="palette-grille">${
+        blocs.map(([k, d]) => `<button type="button" data-ajout="${k}" style="--c:${d.couleur}" title="${echapper(d.description)}">${echapper(d.nom)}<small>${echapper(d.ecole)}</small></button>`).join('')
+      }</div></div>`;
+    }).join('');
+    return `<div class="palette" id="palette"><div class="palette-tete"><p>${titre}</p><input type="search" id="palette-filtre" placeholder="Filtrer les blocs…" aria-label="Filtrer les blocs"></div>${groupes}</div>`;
   }
 
   function rendrePlan() {
@@ -109,6 +114,12 @@
 
   $('plan').addEventListener('input', (ev) => {
     const el = ev.target;
+    if (el.id === 'palette-filtre') {
+      const q = el.value.trim().toLowerCase();
+      document.querySelectorAll('#palette [data-ajout]').forEach((b) => { b.hidden = q && !b.textContent.toLowerCase().includes(q) && !(b.title || '').toLowerCase().includes(q); });
+      document.querySelectorAll('#palette .palette-famille').forEach((f) => { f.hidden = ![...f.querySelectorAll('[data-ajout]')].some((b) => !b.hidden); });
+      return;
+    }
     if (!el.dataset.p) return;
     const bloc = sort.blocs[Number(el.dataset.i)];
     if (el.tagName === 'SELECT') {
@@ -185,7 +196,19 @@
         puces.push(`<span class="puce ${ecart > 30 ? 'chaud' : ecart < -15 ? 'froid' : ''}">${fmtT(s.T)}</span>`);
         puces.push(`<span class="puce">${echapper(M.MATERIAUX[s.matiere.type].nom)} ${M.formatNombre(s.matiere.masse, s.matiere.masse < 1 ? 3 : 1)} kg</span>`);
       }
+      if (s.matiere && s.matiere.phase && s.matiere.phase !== 'solide' && !['air', 'eau', 'vapeur', 'huile'].includes(s.matiere.type)) puces.push(`<span class="puce chaud">${s.matiere.phase}</span>`);
+      if (s.pression > 1.05) puces.push(`<span class="puce">${M.formatNombre(s.pression, 0)} atm</span>`);
+      if (s.forme && s.forme !== 'sphere') puces.push(`<span class="puce">${echapper(B.FORMES[s.forme].nom.toLowerCase())}</span>`);
+      if (s.fragments > 1) puces.push(`<span class="puce">×${s.fragments} fragments</span>`);
+      if (s.charge > 0 && !s.libere) puces.push(`<span class="puce chaud">⚡ ${M.formatEnergie(s.charge)}</span>`);
       if (s.protection && !s.lance) puces.push(`<span class="puce ok">protégé ±${s.protection} °C</span>`);
+      if (s.protElec && !s.lance) puces.push(`<span class="puce ok">isolé ${M.formatEnergie(s.protElec)}</span>`);
+      if (s.bouclier && !s.lance) puces.push(`<span class="puce ok">bouclier ${M.formatEnergie(s.bouclier)}</span>`);
+      if (s.vise) puces.push('<span class="puce ok">cible verrouillée</span>');
+      if (s.guide && !s.libere) puces.push('<span class="puce ok">guidé</span>');
+      if (s.cache && !s.libere) puces.push('<span class="puce ok">invisible</span>');
+      if (s.lumiere && !s.libere) puces.push(`<span class="puce">lumineux</span>`);
+      if (s.piege && !s.libere) puces.push('<span class="puce">en attente</span>');
       if (s.confine && !s.libere) puces.push('<span class="puce ok">confiné</span>');
       if (s.lance && !s.libere) puces.push(`<span class="puce">en vol · ${s.v} m/s</span>`);
       if (s.libere) puces.push('<span class="puce">libéré</span>');

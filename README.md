@@ -1,6 +1,6 @@
 # La Matrice Arcanique
 
-Système de magie **générique et réaliste** pour JDR. Un sort est un **blueprint** : une suite de blocs exécutés dans l'ordre (ancrage, protection, rassembler la matière, confinement, chauffer, attendre, imprégner de mouvement, libération…). La Matrice simule l'état du sort à chaque bloc — température, temps, matière — avec la vraie physique (pertes de chaleur comprises), signale les erreurs de conception (brûlure du lanceur, flamme qui se disperse…) et convertit l'énergie dépensée en coût jouable (l'**Éther**).
+Système de magie **générique et réaliste** pour JDR. Un sort est un **blueprint** : une suite de blocs exécutés dans l'ordre, parmi 27 blocs répartis en six familles (fondation, matière, énergie, mouvement, protection, contrôle) — rassembler ou condenser la matière, changer d'état (chaleur latente réelle), façonner, fragmenter, compresser (adiabatique), chauffer, embraser (combustion), charger électriquement, imprégner de mouvement, téléporter, viser, guider, dissimuler, poser un piège… La Matrice simule l'état du sort à chaque bloc — température, temps, matière — avec la vraie physique (pertes de chaleur comprises), signale les erreurs de conception (brûlure du lanceur, flamme qui se disperse…) et convertit l'énergie dépensée en coût jouable (l'**Éther**).
 
 ## Modules
 
