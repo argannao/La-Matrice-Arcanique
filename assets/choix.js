@@ -94,8 +94,14 @@ const Choix = (() => {
     panneau.remove(); panneau = null;
     if (bouton) { bouton.setAttribute('aria-expanded', 'false'); if (rendreFocus) bouton.focus(); }
     bouton = null; rappel = null;
-    window.removeEventListener('scroll', placer, true);
+    window.removeEventListener('scroll', surDefilement, true);
     window.removeEventListener('resize', placer);
+  }
+
+  // Défilement de la page : on suit le bouton. Défilement dans le panneau lui-même : on ne touche à rien.
+  function surDefilement(ev) {
+    if (panneau && ev.target instanceof Node && panneau.contains(ev.target)) return;
+    placer();
   }
 
   function placer() {
@@ -109,6 +115,7 @@ const Choix = (() => {
     panneau.style.left = `${Math.min(Math.max(marge, r.left), vw - w - marge)}px`;
     const plafond = Math.max(marge, (document.querySelector('.barre')?.getBoundingClientRect().bottom || 0) + 6); // ne pas recouvrir la barre du haut
     const dessous = vh - r.bottom - marge, dessus = r.top - plafond;
+    const defile = panneau.scrollTop;
     panneau.style.maxHeight = '';
     const h = panneau.scrollHeight;
     if (h > dessous && dessus > dessous) {
@@ -119,6 +126,7 @@ const Choix = (() => {
       panneau.style.maxHeight = `${Math.max(160, dessous - 6)}px`;
       panneau.style.top = `${r.bottom + 6}px`;
     }
+    panneau.scrollTop = defile;
   }
 
   function ouvrir(btn, prm, valeur, surChoix) {
@@ -146,7 +154,7 @@ const Choix = (() => {
     document.body.append(panneau);
     btn.setAttribute('aria-expanded', 'true');
     placer();
-    window.addEventListener('scroll', placer, true);
+    window.addEventListener('scroll', surDefilement, true);
     window.addEventListener('resize', placer);
     (panneau.querySelector('[aria-selected="true"]') || panneau.querySelector('.choix-option'))?.focus({ preventScroll: true });
     panneau.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
