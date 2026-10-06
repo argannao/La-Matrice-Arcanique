@@ -1,27 +1,28 @@
 # La Matrice Arcanique
 
-Système de magie **générique et réaliste** pour JDR : chaque sort se construit à partir d'effets physiques (chaleur, mouvement, lumière, matière…), la physique réelle donne l'énergie en joules, puis des règles d'inspiration — réglables — la convertissent en coût jouable (l'**Éther**).
+Système de magie **générique et réaliste** pour JDR. Un sort est un **blueprint** : une suite de blocs exécutés dans l'ordre (ancrage, protection, rassembler la matière, confinement, chauffer, attendre, imprégner de mouvement, libération…). La Matrice simule l'état du sort à chaque bloc — température, temps, matière — avec la vraie physique (pertes de chaleur comprises), signale les erreurs de conception (brûlure du lanceur, flamme qui se disperse…) et convertit l'énergie dépensée en coût jouable (l'**Éther**).
 
 ## Modules
 
 | Page | Rôle |
 |---|---|
 | `index.html` | Accueil et menu |
-| `forge.html` | Constructeur de sorts, calcul du coût en direct |
+| `forge.html` | Éditeur de blueprints : blocs réordonnables, état après chaque bloc, courbe de température, coût et dangers |
 | `grimoire.html` | Sorts sauvegardés (navigateur), sorts d'exemple, import / export JSON |
-| `lois.html` | Référence des règles : formules, facteurs, cercles, échelle des énergies |
+| `lois.html` | Référence des règles : blueprints, blocs, physique des pertes, dangers, Éther et cercles |
 
 ## Structure
 
 ```
 assets/
-  matrice.js   moteur de calcul (composantes, facteurs, conversion en Éther, exemples)
+  matrice.js   données de base (matériaux, effets directs, réglages, formatage, stockage)
+  blueprint.js blocs du blueprint, simulation, coût, blueprints d'exemple
   commun.js    barre de navigation, pied de page, notifications
   forge.js     logique de la Forge
   style.css    style commun
 ```
 
-Ajouter une composante : une entrée dans `EFFETS` de `assets/matrice.js` (nom, école, nature, formule, paramètres, fonction `calcul`). La Forge et les Lois la prennent en compte automatiquement.
+Ajouter un bloc : une entrée dans `BLOCS` de `assets/blueprint.js` (nom, école, nature, couleur, description, formule, paramètres, fonction `appliquer(etat, params, ctx)`). Ajouter un effet direct : une entrée dans `EFFETS` de `assets/matrice.js`. La Forge et les Lois les prennent en compte automatiquement.
 
 ## Publication
 

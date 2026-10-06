@@ -161,6 +161,6 @@ footer.pied { text-align: center; color: var(--texte-faible); font-size: 0.85rem
 
 @media (max-width: 600px) {
   .barre { flex-direction: column; align-items: flex-start; gap: 0.4rem; }
-  .barre nav { width: 100%; }
+  .barre nav { width: 100%; max-width: 100%; }
   h2 { font-size: 1.5rem; }
 }

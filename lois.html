@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Lois de la Matrice</title>
-  <meta name="description" content="Les règles de La Matrice Arcanique : formules physiques, modificateurs, rendement, cercles de puissance.">
+  <meta name="description" content="Les règles de La Matrice Arcanique : blueprints, blocs, simulation thermique, rendement, Éther et cercles de puissance.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -13,104 +13,133 @@
     .sommaire { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 1.5rem 0; }
     .sommaire a { font-size: 0.85rem; text-decoration: none; padding: 0.3rem 0.65rem; border: 1px solid var(--ligne); border-radius: 99px; color: var(--texte-doux); }
     .sommaire a:hover { color: var(--arcane); border-color: var(--arcane); }
-    .etape { display: grid; grid-template-columns: 2.4rem 1fr; gap: 0.9rem; margin: 1.2rem 0; }
+    .etape { display: grid; grid-template-columns: 2.4rem 1fr; gap: 0.9rem; margin: 1.1rem 0; }
     .etape .n { font-family: var(--serif); font-size: 2rem; color: var(--laiton); line-height: 1; }
     .etape p { margin: 0.2rem 0 0; color: var(--texte-doux); }
     .legende { display: flex; flex-wrap: wrap; gap: 1rem; font-size: 0.85rem; color: var(--texte-doux); margin-bottom: 0.8rem; }
+    .bloc-nom { display: inline-block; border-left: 3px solid var(--c); padding-left: 0.45rem; font-weight: 600; }
     section { scroll-margin-top: 5rem; }
+    .regle { background: var(--surface); border: 1px solid var(--ligne); border-radius: var(--rayon); padding: 1rem 1.2rem; margin: 0.8rem 0; }
+    .regle h3 { color: var(--laiton); }
+    .regle p { margin: 0.3rem 0 0; color: var(--texte-doux); }
   </style>
 </head>
 <body>
   <main class="page etroit">
     <div class="surtitre">Référence</div>
     <h1>Les Lois de la Matrice</h1>
-    <p class="chapeau">La Matrice Arcanique mêle deux sources de règles : la physique réelle, qui fixe l'énergie de chaque effet, et des lois inventées, cohérentes et réglables, qui transforment cette énergie en coût jouable.</p>
+    <p class="chapeau">Dans la Matrice, un sort n'est pas une formule qu'on récite : c'est un <strong>blueprint</strong>, une suite d'opérations que le lanceur exécute dans l'ordre. La physique réelle dit ce que chaque opération coûte et combien de temps elle prend ; quelques lois inventées complètent ce que la physique ne couvre pas.</p>
 
     <nav class="sommaire">
-      <a href="#chaine">La chaîne du calcul</a>
-      <a href="#composantes">Composantes</a>
-      <a href="#tissage">Tissage</a>
-      <a href="#lanceur">Lanceur</a>
-      <a href="#ether">Éther et cercles</a>
+      <a href="#blueprint">Le blueprint</a>
+      <a href="#exemple">Exemple : la boule de feu</a>
+      <a href="#blocs">Les blocs</a>
+      <a href="#thermique">Chaleur et pertes</a>
+      <a href="#dangers">Dangers</a>
+      <a href="#effets">Effets directs</a>
+      <a href="#ether">Lanceur, Éther et cercles</a>
       <a href="#echelle">Échelle des énergies</a>
       <a href="#table">Utiliser à table</a>
     </nav>
 
-    <section id="chaine">
-      <h2>La chaîne du calcul</h2>
-      <div class="etape"><span class="n">1</span><div><h3>Énergie des effets</h3><p>Chaque composante calcule son énergie en joules. On additionne toutes les composantes du sort.</p></div></div>
-      <div class="etape"><span class="n">2</span><div><h3>Tissage</h3><p>L'énergie est multipliée par les facteurs de portée, cibles, précision, complexité, incantation et focalisateur.</p></div></div>
-      <div class="etape"><span class="n">3</span><div><h3>Rendement</h3><p>Le lanceur ne transmet qu'une fraction de ce qu'il puise. L'énergie tissée est divisée par son rendement.</p></div></div>
-      <div class="etape"><span class="n">4</span><div><h3>Coût en Éther</h3><p>L'énergie puisée est convertie en Éther sur une échelle logarithmique, puis comparée à la réserve du lanceur.</p></div></div>
-      <div class="formule">E_puisée = Σ E_composantes × facteurs ÷ rendement</div>
+    <section id="blueprint">
+      <h2>Le blueprint</h2>
+      <p>Chaque bloc transforme l'<em>état</em> du sort : la matière qu'il contient, sa température, le temps écoulé, s'il est protégé, confiné, lancé ou libéré. La Matrice simule cet état bloc après bloc.</p>
+      <div class="regle"><h3>L'ordre compte</h3><p>Chauffer avant de se protéger, c'est se brûler pendant la montée en température. Lancer avant de confiner, c'est voir la flamme se disperser en vol.</p></div>
+      <div class="regle"><h3>Le temps compte</h3><p>Une puissance limitée met du temps à chauffer une masse. Pendant ce temps, les protections et confinements s'entretiennent et la chaleur fuit : charger trop longtemps coûte cher.</p></div>
+      <div class="regle"><h3>Tout se paie</h3><p>Le coût final additionne l'énergie de chaque bloc et celle des entretiens, puis passe par le rendement du lanceur pour donner le coût en Éther.</p></div>
     </section>
 
-    <section id="composantes">
-      <h2>Composantes</h2>
+    <section id="exemple">
+      <h2>Exemple : la boule de feu</h2>
+      <div class="etape"><span class="n">1</span><div><h3>Ancrage dans la main</h3><p>Le sort naît au creux de la paume.</p></div></div>
+      <div class="etape"><span class="n">2</span><div><h3>Protection thermique ±1 000 °C</h3><p>Sans elle, la main brûle dès que la flamme dépasse 50 °C.</p></div></div>
+      <div class="etape"><span class="n">3</span><div><h3>Rassembler 2 kg d'air</h3><p>Le combustible du sort : environ 1,7 m³ d'air condensé.</p></div></div>
+      <div class="etape"><span class="n">4</span><div><h3>Confinement</h3><p>Une bulle de force garde la chaleur et la masse ensemble.</p></div></div>
+      <div class="etape"><span class="n">5</span><div><h3>Chauffer à 800 °C avec 200 kW</h3><p>Il faut environ 8 secondes pour que la sphère atteigne la température voulue.</p></div></div>
+      <div class="etape"><span class="n">6</span><div><h3>Imprégner de mouvement : 25 m/s vers une cible à 20 m</h3><p>La sphère quitte la main (la protection se relâche) et vole 0,8 s.</p></div></div>
+      <div class="etape"><span class="n">7</span><div><h3>Libération en explosion</h3><p>Le confinement se rompt : environ 1,6 MJ se déchargent sur la zone.</p></div></div>
+      <p><a href="forge.html?exemple=ex-boule-de-feu">Ouvrir ce blueprint dans la Forge →</a> · <a href="forge.html?exemple=ex-flamme-nue">voir la version ratée →</a></p>
+    </section>
+
+    <section id="blocs">
+      <h2>Les blocs</h2>
       <div class="legende">
         <span><span class="pastille rigoureux">physique réelle</span> formule exacte</span>
         <span><span class="pastille mixte">physique + inspiration</span> base réelle, ajustée</span>
         <span><span class="pastille inspire">loi inventée</span> règle de la Matrice</span>
       </div>
       <div class="table-wrap"><table>
-        <thead><tr><th>Composante</th><th>École</th><th>Formule</th></tr></thead>
-        <tbody id="t-composantes"></tbody>
+        <thead><tr><th>Bloc</th><th>Rôle</th><th>Coût</th></tr></thead>
+        <tbody id="t-blocs"></tbody>
       </table></div>
-      <h3 style="margin-top:1.5rem">Capacités thermiques (c)</h3>
+    </section>
+
+    <section id="thermique">
+      <h2>Chaleur et pertes</h2>
+      <p>Chauffer une matière demande l'énergie <span class="mono">m · c · ΔT</span>, mais la chaleur s'échappe en permanence vers l'air ambiant (<span class="mono" id="v-amb"></span> °C), d'autant plus vite que la matière est chaude. La température suit donc une courbe qui ralentit à l'approche de la cible.</p>
+      <div class="formule">m · c · dT/dt = P − h · (T − T_amb)</div>
+      <div class="formule">h = k · m^(2/3)   avec   k = 25 (libre) ou 1 (confiné),   ×(1 + v/5) en vol</div>
+      <p>Si la puissance est trop faible, les pertes finissent par l'égaler et la température plafonne : la Forge le signale. Le même calcul fonctionne pour refroidir (P négative).</p>
+      <h3 style="margin-top:1.4rem">Capacités thermiques (c)</h3>
       <div class="table-wrap"><table>
         <thead><tr><th>Matériau</th><th>c (J/kg·°C)</th><th>Pour chauffer 1 kg de 100 °C</th></tr></thead>
         <tbody id="t-materiaux"></tbody>
       </table></div>
     </section>
 
-    <section id="tissage">
-      <h2>Tissage</h2>
-      <h3>Portée — « la distance use »</h3>
-      <p>L'effet se dissipe en s'éloignant du lanceur, à la manière de la loi en carré inverse. À la portée de référence (<span class="mono" id="v-portee"></span> m par défaut), l'énergie nécessaire est quadruplée.</p>
-      <div class="formule">facteur = (1 + d / portée_ref)²</div>
+    <section id="dangers">
+      <h2>Dangers détectés</h2>
       <div class="table-wrap"><table>
-        <thead><tr><th>Distance</th><th>Facteur</th></tr></thead>
-        <tbody id="t-portee"></tbody>
-      </table></div>
-      <h3 style="margin-top:1.5rem">Autres facteurs</h3>
-      <div class="table-wrap"><table>
-        <thead><tr><th>Facteur</th><th>Option</th><th>Multiplicateur</th></tr></thead>
-        <tbody id="t-facteurs"></tbody>
+        <thead><tr><th>Situation</th><th>Conséquence</th></tr></thead>
+        <tbody>
+          <tr><td>Sort ancré dans la main au-delà de 50 °C (ou sous −10 °C) sans protection suffisante</td><td>Brûlure (ou gelure) du lanceur</td></tr>
+          <tr><td>Sort ancré devant soi au-delà de 250 °C (ou sous −60 °C)</td><td>Brûlure par rayonnement</td></tr>
+          <tr><td>Chauffer sans matière</td><td>La chaleur se perd dans le vide</td></tr>
+          <tr><td>Lancer un gaz brûlant sans confinement</td><td>Il se disperse et arrive refroidi</td></tr>
+          <tr><td>Libérer le sort sans l'avoir lancé</td><td>Le lanceur encaisse l'explosion</td></tr>
+          <tr><td>Blocs après la libération</td><td>Sans effet : le sort n'existe plus</td></tr>
+        </tbody>
       </table></div>
     </section>
 
-    <section id="lanceur">
-      <h2>Lanceur</h2>
-      <p>Aucun mage ne transmet toute l'énergie qu'il puise : le reste se perd en chaleur, en tremblements, en saignements de nez. La maîtrise améliore le rendement et agrandit la réserve d'Éther.</p>
+    <section id="effets">
+      <h2>Effets directs</h2>
+      <p>Certains effets ne gagnent rien à être construits pas à pas. Le bloc « Effet direct » les applique d'un coup au point d'ancrage, avec leur formule propre. Ancrés à distance, ils coûtent plus cher : l'énergie est multipliée par <span class="mono">(1 + d / portée_ref)²</span>, soit ×4 à <span class="mono" id="v-portee"></span> m.</p>
       <div class="table-wrap"><table>
-        <thead><tr><th>Maîtrise</th><th>Rendement</th><th>Réserve d'Éther</th></tr></thead>
-        <tbody id="t-niveaux"></tbody>
+        <thead><tr><th>Effet</th><th>École</th><th>Formule</th></tr></thead>
+        <tbody id="t-effets"></tbody>
       </table></div>
     </section>
 
     <section id="ether">
-      <h2>Éther et cercles de puissance</h2>
-      <p>L'Éther est l'unité de jeu. Chaque fois que l'énergie puisée est multipliée par 10, le coût en Éther est multiplié par la <em>progression</em> (<span class="mono" id="v-base"></span> par défaut). Cela garde les sorts quotidiens abordables et rend les prodiges ruineux.</p>
+      <h2>Lanceur, Éther et cercles</h2>
+      <p>Aucun mage ne transmet toute l'énergie qu'il puise : le reste se perd en chaleur, en tremblements, en saignements de nez. Un focalisateur réduit l'énergie nécessaire.</p>
+      <div class="formule">E_puisée = (Σ blocs + Σ entretiens) × focalisateur ÷ rendement</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Maîtrise</th><th>Rendement</th><th>Réserve d'Éther</th></tr></thead>
+        <tbody id="t-niveaux"></tbody>
+      </table></div>
+      <p style="margin-top:1.2rem">L'Éther est l'unité de jeu. Chaque fois que l'énergie puisée est multipliée par 10, le coût en Éther est multiplié par la <em>progression</em> (<span class="mono" id="v-base"></span> par défaut).</p>
       <div class="formule">Éther = progression ^ log₁₀(E_puisée en joules)</div>
       <div class="table-wrap"><table>
         <thead><tr><th>Énergie puisée</th><th>Éther</th><th>Cercle</th></tr></thead>
         <tbody id="t-ether"></tbody>
       </table></div>
-      <h3 style="margin-top:1.5rem">Risques</h3>
+      <h3 style="margin-top:1.4rem">Risques pour le lanceur</h3>
       <div class="table-wrap"><table>
-        <thead><tr><th>Part de la réserve</th><th>Effet sur le lanceur</th></tr></thead>
+        <thead><tr><th>Part de la réserve</th><th>Effet</th></tr></thead>
         <tbody>
           <tr><td class="num">≤ 25 %</td><td>Sans danger.</td></tr>
           <tr><td class="num">≤ 60 %</td><td>Éprouvant : fatigue notable.</td></tr>
           <tr><td class="num">≤ 100 %</td><td>Épuisant : au bord de la syncope.</td></tr>
-          <tr><td class="num">&gt; 100 %</td><td>Contrecoup : le surplus est payé en blessures. Au MJ d'en fixer la gravité selon son système.</td></tr>
+          <tr><td class="num">&gt; 100 %</td><td>Contrecoup : le surplus est payé en blessures. Au MJ d'en fixer la gravité.</td></tr>
         </tbody>
       </table></div>
     </section>
 
     <section id="echelle">
       <h2>Échelle des énergies</h2>
-      <p>Pour se représenter ce que coûte un sort.</p>
       <div class="table-wrap"><table>
         <thead><tr><th>Énergie</th><th>Équivalent</th></tr></thead>
         <tbody id="t-echelle"></tbody>
@@ -119,49 +148,45 @@
 
     <section id="table">
       <h2>Utiliser la Matrice à table</h2>
-      <p>La Matrice est générique : elle donne un coût, pas une mécanique de dés. Quelques façons de la brancher sur ton système :</p>
+      <p>La Matrice est générique : elle donne un coût, un temps et des risques, pas une mécanique de dés.</p>
       <ul>
-        <li><strong>Points de magie :</strong> l'Éther remplace directement les points de mana ou de sort.</li>
-        <li><strong>Fatigue :</strong> chaque tranche de 10 Éther coûte un niveau de fatigue ou un point d'endurance.</li>
-        <li><strong>Difficulté :</strong> le cercle du sort fixe le seuil ou le malus du jet d'incantation.</li>
-        <li><strong>Récupération :</strong> une nuit de repos rend la réserve ; une heure de méditation en rend un quart.</li>
+        <li><strong>Points de magie :</strong> l'Éther remplace directement les points de mana.</li>
+        <li><strong>Temps de charge :</strong> convertis-le en rounds ou en actions ; un lanceur interrompu perd son sort (et l'énergie déjà dépensée).</li>
+        <li><strong>Difficulté :</strong> le cercle du sort ou son nombre de blocs fixe le seuil du jet d'incantation.</li>
+        <li><strong>Dangers :</strong> un blueprint mal conçu fonctionne quand même — et le lanceur en subit les conséquences.</li>
       </ul>
-      <p>Les réglages de table de la Forge (progression, portée de référence, rendements, réserves) permettent de rendre la magie plus rare ou plus commune.</p>
     </section>
   </main>
 
   <script src="assets/matrice.js"></script>
+  <script src="assets/blueprint.js"></script>
   <script src="assets/commun.js"></script>
   <script>
   (() => {
-    const M = Matrice, R = M.reglages(), $ = (id) => document.getElementById(id);
+    const M = Matrice, B = Blueprint, R = M.reglages(), $ = (id) => document.getElementById(id);
     const NATURE = { rigoureux: 'physique réelle', mixte: 'physique + inspiration', inspire: 'loi inventée' };
     const ligne = (cells) => `<tr>${cells.map((c) => `<td${c.num ? ' class="num"' : ''}>${c.html ?? echapper(c.t ?? c)}</td>`).join('')}</tr>`;
 
-    $('t-composantes').innerHTML = Object.values(M.EFFETS).map((e) => ligne([
+    $('t-blocs').innerHTML = Object.values(B.BLOCS).map((b) => ligne([
+      { html: `<span class="bloc-nom" style="--c:${b.couleur}">${echapper(b.nom)}</span><br><span class="pastille ${b.nature}" style="margin-top:.3rem">${NATURE[b.nature]}</span>` },
+      { html: `<small style="color:var(--texte-doux)">${echapper(b.description)}</small>` },
+      { t: b.formule || '—', num: true },
+    ])).join('');
+
+    $('v-amb').textContent = B.AMBIANTE;
+    $('t-materiaux').innerHTML = Object.values(M.MATERIAUX).map((m) => ligne([m.nom, { t: M.formatNombre(m.c), num: true }, { t: M.formatEnergie(m.c * 100), num: true }])).join('');
+
+    $('v-portee').textContent = R.porteeRef;
+    $('t-effets').innerHTML = Object.values(M.EFFETS).map((e) => ligne([
       { html: `<strong>${echapper(e.nom)}</strong> <span class="pastille ${e.nature}">${NATURE[e.nature]}</span><br><small style="color:var(--texte-doux)">${echapper(e.description)}</small>` },
       e.ecole, { t: e.formule, num: true },
     ])).join('');
 
-    $('t-materiaux').innerHTML = Object.values(M.MATERIAUX).map((m) => ligne([m.nom, { t: M.formatNombre(m.c), num: true }, { t: M.formatEnergie(m.c * 100), num: true }])).join('');
-
-    $('v-portee').textContent = R.porteeRef;
-    $('t-portee').innerHTML = [0, 5, 10, 20, 50, 100].map((d) => ligne([{ t: d ? d + ' m' : 'contact', num: true }, { t: '×' + M.formatNombre((1 + d / R.porteeRef) ** 2, 2), num: true }])).join('');
-
-    const fact = [];
-    fact.push(ligne(['Cibles', 'par cible supplémentaire', { t: '×n', num: true }]));
-    fact.push(ligne(['Complexité', 'par composante au-delà de la première', { t: '+' + M.formatNombre(R.complexite, 2), num: true }]));
-    for (const [nom, obj] of [['Précision', M.PRECISION], ['Incantation', M.INCANTATION], ['Focalisateur', M.FOCALISATEUR]])
-      for (const v of Object.values(obj)) fact.push(ligne([nom, v.nom, { t: '×' + M.formatNombre(v.f, 2), num: true }]));
-    $('t-facteurs').innerHTML = fact.join('');
-
     $('t-niveaux').innerHTML = Object.values(R.niveaux).map((n) => ligne([n.nom, { t: Math.round(n.rendement * 100) + ' %', num: true }, { t: n.reserve, num: true }])).join('');
-
     $('v-base').textContent = M.formatNombre(R.base, 2);
     $('t-ether').innerHTML = [10, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e12].map((e) => ligne([
       { t: M.formatEnergie(e), num: true }, { t: Math.max(1, Math.round(R.base ** Math.log10(e))), num: true }, M.CERCLES.find((c) => e < c.max).nom,
     ])).join('');
-
     $('t-echelle').innerHTML = M.ECHELLE.map((x) => ligne([{ t: M.formatEnergie(x.e), num: true }, x.txt.charAt(0).toUpperCase() + x.txt.slice(1)])).join('');
   })();
   </script>

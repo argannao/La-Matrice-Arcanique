@@ -299,9 +299,9 @@ const Matrice = (() => {
     return {
       id: 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       nom: '', ecole: '', description: '',
-      composantes: [],
-      modificateurs: { portee: 0, cibles: 1, precision: 'brut', incantation: 'normale', focalisateur: 'aucun' },
-      lanceur: { niveau: 'adepte', reserve: null },
+      blocs: [{ type: 'ancrage', params: { lieu: 'main', distance: 10 } }],
+      lanceur: { niveau: 'adepte', reserve: null, focalisateur: 'aucun' },
+      version: 2,
     };
   }
 
@@ -323,53 +323,4 @@ const Matrice = (() => {
   };
 })();
 
-/* --- Sorts d'exemple ------------------------------------------------------- */
-const EXEMPLES = [
-  {
-    id: 'ex-boule-de-feu', nom: 'Boule de feu', ecole: 'Pyromancie',
-    description: 'Une sphère d\'air surchauffé projetée vers la cible, qui embrase tout à l\'impact.',
-    composantes: [
-      { type: 'thermique', params: { masse: 2, materiau: 'air', deltaT: 800 } },
-      { type: 'cinetique', params: { masse: 2, vitesse: 25 } },
-    ],
-    modificateurs: { portee: 20, cibles: 1, precision: 'brut', incantation: 'normale', focalisateur: 'simple' },
-    lanceur: { niveau: 'maitre', reserve: null },
-  },
-  {
-    id: 'ex-flamme-eternelle', nom: 'Lueur du veilleur', ecole: 'Lumen',
-    description: 'Une petite lumière flottante qui éclaire comme une torche pendant dix minutes.',
-    composantes: [{ type: 'lumiere', params: { puissance: '10', duree: 600 } }],
-    modificateurs: { portee: 0, cibles: 1, precision: 'brut', incantation: 'normale', focalisateur: 'aucun' },
-    lanceur: { niveau: 'novice', reserve: null },
-  },
-  {
-    id: 'ex-refermer-plaies', nom: 'Refermer les plaies', ecole: 'Biomancie',
-    description: 'Le guérisseur pose les mains sur la blessure et force les chairs à se reconstruire.',
-    composantes: [{ type: 'soin', params: { blessure: '20', nombre: 1 } }],
-    modificateurs: { portee: 0, cibles: 1, precision: 'precis', incantation: 'normale', focalisateur: 'aucun' },
-    lanceur: { niveau: 'adepte', reserve: null },
-  },
-  {
-    id: 'ex-egide', nom: 'Égide', ecole: 'Abjuration',
-    description: 'Un bouclier translucide qui arrête quelques coups d\'épée pendant une minute.',
-    composantes: [{ type: 'protection', params: { capacite: '500', surface: 1.5, duree: 60 } }],
-    modificateurs: { portee: 0, cibles: 1, precision: 'brut', incantation: 'instantanee', focalisateur: 'simple' },
-    lanceur: { niveau: 'adepte', reserve: null },
-  },
-  {
-    id: 'ex-foudre', nom: 'Trait de foudre', ecole: 'Électromancie',
-    description: 'Un arc électrique qui frappe une cible à quinze pas.',
-    composantes: [{ type: 'foudre', params: { tension: 100000, intensite: 30, duree: 0.01 } }],
-    modificateurs: { portee: 15, cibles: 1, precision: 'precis', incantation: 'normale', focalisateur: 'ouvrage' },
-    lanceur: { niveau: 'maitre', reserve: null },
-  },
-  {
-    id: 'ex-pas-de-cote', nom: 'Pas de côté', ecole: 'Translocation',
-    description: 'Le lanceur disparaît et réapparaît cinq mètres plus loin.',
-    composantes: [{ type: 'translocation', params: { masse: 80, distance: 5 } }],
-    modificateurs: { portee: 0, cibles: 1, precision: 'precis', incantation: 'instantanee', focalisateur: 'aucun' },
-    lanceur: { niveau: 'maitre', reserve: null },
-  },
-];
-
-if (typeof module !== 'undefined') module.exports = { Matrice, EXEMPLES };
+if (typeof module !== 'undefined') module.exports = { Matrice };

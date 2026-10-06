@@ -4,141 +4,188 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>La Forge</title>
-  <meta name="description" content="Constructeur de sorts de La Matrice Arcanique : le coût se calcule en direct à partir de la physique.">
+  <meta name="description" content="Éditeur de blueprints de sorts : enchaîne les étapes, la Matrice simule la physique et calcule le coût.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/style.css">
   <style>
-    .forge { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 1.5rem; align-items: start; margin-top: 1.5rem; }
+    .forge { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 1.5rem; align-items: start; margin-top: 1.5rem; }
     .bloc-titre { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 0.9rem; }
     .bloc-titre h2 { margin: 0; font-size: 1.45rem; }
-    .bloc-titre small { color: var(--texte-faible); }
+    .bloc-titre small { color: var(--texte-faible); font-family: var(--mono); font-size: 0.78rem; }
 
-    .ajout { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 0.45rem; }
-    .ajout button {
-      background: var(--bg-2); border: 1px dashed var(--ligne-forte); color: var(--texte-doux);
-      border-radius: 7px; padding: 0.5rem 0.6rem; font: inherit; font-size: 0.86rem; cursor: pointer; text-align: left;
+    /* Plan de travail façon blueprint */
+    .plan {
+      background-color: #0f1726;
+      background-image:
+        linear-gradient(rgba(111, 168, 232, 0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(111, 168, 232, 0.08) 1px, transparent 1px),
+        linear-gradient(rgba(111, 168, 232, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(111, 168, 232, 0.035) 1px, transparent 1px);
+      background-size: 80px 80px, 80px 80px, 16px 16px, 16px 16px;
+      border: 1px solid #263552; border-radius: var(--rayon); padding: 1.25rem;
     }
-    .ajout button:hover { border-color: var(--arcane); border-style: solid; color: var(--arcane); }
+    .noeud {
+      position: relative; background: rgba(23, 26, 38, 0.96); border: 1px solid var(--ligne);
+      border-left: 4px solid var(--c, var(--arcane)); border-radius: 9px; padding: 0.9rem 1rem 0.8rem;
+    }
+    .noeud.danger { border-color: rgba(226, 86, 90, 0.6); border-left-color: var(--c); }
+    .noeud-tete { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.6rem; }
+    .noeud-tete h3 { margin: 0; font-size: 1.2rem; display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
+    .noeud-tete .num { font-family: var(--mono); font-size: 0.75rem; color: var(--c); }
+    .noeud-outils { display: flex; gap: 0.25rem; flex-shrink: 0; }
+    .noeud-outils button { background: transparent; border: 1px solid var(--ligne); color: var(--texte-doux); border-radius: 6px; width: 28px; height: 28px; cursor: pointer; font-size: 0.8rem; }
+    .noeud-outils button:hover { color: var(--arcane); border-color: var(--arcane); }
+    .noeud-outils button:disabled { opacity: 0.3; cursor: default; }
+    .noeud-desc { color: var(--texte-doux); font-size: 0.85rem; margin: 0.25rem 0 0.6rem; }
+    .noeud .formule { font-size: 0.78rem; margin: 0 0 0.8rem; padding: 0.4rem 0.7rem; border-left-color: var(--c); }
+    .noeud .champs { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+    .etat { display: flex; flex-wrap: wrap; gap: 0.35rem; padding-top: 0.6rem; border-top: 1px dashed var(--ligne); }
+    .puce { font-family: var(--mono); font-size: 0.72rem; padding: 0.15rem 0.5rem; border-radius: 99px; background: var(--bg-2); border: 1px solid var(--ligne); color: var(--texte-doux); white-space: nowrap; }
+    .puce.e { color: var(--arcane); border-color: var(--arcane-sombre); }
+    .puce.chaud { color: #f0a46b; border-color: #6e4527; }
+    .puce.froid { color: #8fc4f5; border-color: #2d4f73; }
+    .puce.ok { color: var(--sur); border-color: #2f5a3b; }
+    .alertes { list-style: none; padding: 0; margin: 0.6rem 0 0; display: flex; flex-direction: column; gap: 0.35rem; }
+    .alertes li { font-size: 0.84rem; padding: 0.4rem 0.6rem; border-radius: 6px; border-left: 3px solid; background: var(--bg-2); }
+    .alertes .danger { border-color: var(--critique); color: #f2b5b6; }
+    .alertes .attention { border-color: var(--modere); color: #eedd9e; }
+    .alertes .info { border-color: var(--arcane-sombre); color: var(--texte-doux); }
 
-    .compo { background: var(--bg-2); border: 1px solid var(--ligne); border-radius: 9px; padding: 1rem; margin-bottom: 0.8rem; }
-    .compo-tete { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; margin-bottom: 0.4rem; }
-    .compo-tete h3 { margin: 0; font-size: 1.2rem; }
-    .compo-desc { color: var(--texte-doux); font-size: 0.88rem; margin: 0 0 0.3rem; }
-    .compo .formule { font-size: 0.82rem; margin: 0.4rem 0 0.9rem; }
-    .compo-energie { font-family: var(--mono); color: var(--arcane); font-size: 0.9rem; white-space: nowrap; }
+    .lien { position: relative; height: 38px; display: flex; justify-content: center; align-items: center; }
+    .lien::before { content: ''; position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; background: linear-gradient(#3b5a8a, #6fa8e8); transform: translateX(-50%); }
+    .lien .dt { position: absolute; left: calc(50% + 14px); font-family: var(--mono); font-size: 0.7rem; color: #7f9cc7; }
+    .lien button {
+      position: relative; width: 24px; height: 24px; border-radius: 50%; border: 1px solid #3b5a8a;
+      background: #0f1726; color: #9ec3ef; cursor: pointer; font-size: 0.95rem; line-height: 1; padding: 0;
+    }
+    .lien button:hover, .lien button.actif { background: #6fa8e8; color: #0f1726; }
 
-    .resultat { position: sticky; top: 4.5rem; }
+    .palette { background: rgba(23, 26, 38, 0.97); border: 1px dashed #3b5a8a; border-radius: 9px; padding: 0.8rem; }
+    .palette p { margin: 0 0 0.5rem; font-size: 0.82rem; color: var(--texte-doux); }
+    .palette-grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 0.4rem; }
+    .palette button {
+      text-align: left; background: var(--bg-2); border: 1px solid var(--ligne); border-left: 3px solid var(--c);
+      color: var(--texte); border-radius: 6px; padding: 0.45rem 0.6rem; font: inherit; font-size: 0.85rem; cursor: pointer;
+    }
+    .palette button small { display: block; color: var(--texte-faible); font-size: 0.72rem; }
+    .palette button:hover { border-color: var(--c); }
+
+    .resultat { position: sticky; top: 4.5rem; display: flex; flex-direction: column; gap: 1rem; }
     .ether { display: flex; align-items: baseline; gap: 0.5rem; }
-    .ether .valeur { font-family: var(--serif); font-size: 4rem; font-weight: 700; line-height: 1; color: var(--texte); }
-    .ether .unite { color: var(--texte-doux); font-size: 1rem; }
-    .cercle { font-family: var(--mono); font-size: 0.8rem; color: var(--laiton); letter-spacing: 0.06em; text-transform: uppercase; margin: 0.4rem 0 1rem; }
+    .ether .valeur { font-family: var(--serif); font-size: 3.6rem; font-weight: 700; line-height: 1; }
+    .ether .unite { color: var(--texte-doux); }
+    .cercle { font-family: var(--mono); font-size: 0.78rem; color: var(--laiton); letter-spacing: 0.06em; text-transform: uppercase; margin: 0.35rem 0 0.9rem; }
     .jauge { height: 10px; background: var(--bg-2); border: 1px solid var(--ligne); border-radius: 99px; overflow: hidden; }
     .jauge > div { height: 100%; width: 0; transition: width .3s ease, background-color .3s; }
-    .jauge-leg { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 0.75rem; color: var(--texte-faible); margin: 0.3rem 0 0.8rem; }
-    .risque { font-size: 0.9rem; padding: 0.6rem 0.75rem; border-radius: 7px; border-left: 3px solid; background: var(--bg-2); }
+    .jauge-leg { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 0.72rem; color: var(--texte-faible); margin: 0.3rem 0 0.7rem; }
+    .risque { font-size: 0.88rem; padding: 0.55rem 0.7rem; border-radius: 7px; border-left: 3px solid; background: var(--bg-2); }
     .risque.sur { border-color: var(--sur); } .risque.modere { border-color: var(--modere); }
     .risque.eleve { border-color: var(--eleve); } .risque.critique { border-color: var(--critique); color: #f2b5b6; }
     .risque.nul { border-color: var(--ligne-forte); color: var(--texte-faible); }
-    .decompte { width: 100%; margin: 1rem 0; font-size: 0.85rem; }
-    .decompte td { padding: 0.32rem 0; border: none; }
-    .decompte td:last-child { text-align: right; font-family: var(--mono); color: var(--texte-doux); }
-    .decompte tr.total td { border-top: 1px solid var(--ligne); padding-top: 0.5rem; color: var(--texte); font-weight: 600; }
-    .decompte tr.total td:last-child { color: var(--arcane); }
-    .comparaison { font-size: 0.85rem; color: var(--texte-doux); font-style: italic; margin-bottom: 1rem; }
-
+    .chiffres { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 0.9rem; }
+    .chiffre { background: var(--bg-2); border: 1px solid var(--ligne); border-radius: 7px; padding: 0.5rem 0.65rem; }
+    .chiffre small { display: block; font-size: 0.72rem; color: var(--texte-faible); }
+    .chiffre b { font-family: var(--mono); font-weight: 500; font-size: 0.95rem; }
+    .bilan-alertes { margin-top: 0.9rem; font-size: 0.86rem; }
+    .bilan-alertes.ok { color: var(--sur); }
+    .bilan-alertes.ko { color: #f2b5b6; }
+    .courbe svg { width: 100%; height: auto; display: block; }
+    .courbe-leg { display: flex; gap: 1rem; flex-wrap: wrap; font-size: 0.75rem; color: var(--texte-faible); margin-top: 0.4rem; }
+    .courbe-leg i { display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin-right: 0.3rem; }
+    .comparaison { font-size: 0.84rem; color: var(--texte-doux); font-style: italic; margin-top: 0.6rem; }
     details.reglages summary { cursor: pointer; font-family: var(--serif); font-size: 1.3rem; font-weight: 600; }
     details.reglages[open] summary { margin-bottom: 0.9rem; }
     .aide { font-size: 0.8rem; color: var(--texte-faible); margin-top: -0.5rem; margin-bottom: 0.85rem; }
 
-    @media (max-width: 920px) {
-      .forge { grid-template-columns: 1fr; }
-      .resultat { position: static; order: -1; }
+    @media (max-width: 960px) {
+      .forge { grid-template-columns: minmax(0, 1fr); }
+      .resultat { position: static; }
     }
   </style>
 </head>
 <body>
   <main class="page">
-    <div class="surtitre">Module</div>
+    <div class="surtitre">Module · Blueprint</div>
     <h1>La Forge</h1>
-    <p class="chapeau">Assemble les composantes de ton sort. Les formules physiques donnent l'énergie de chaque effet ; la Matrice en déduit le coût pour le lanceur.</p>
+    <p class="chapeau">Construis ton sort étape par étape, comme un plan. La Matrice simule ce qui se passe à chaque bloc — température, temps, matière — et te prévient si ton sort te brûle, fuit ou ne mène à rien.</p>
 
     <div class="forge">
       <div>
         <section class="carte">
-          <div class="bloc-titre"><h2>Identité</h2></div>
           <div class="champs">
             <div class="champ"><label for="nom">Nom du sort</label><input id="nom" placeholder="Boule de feu"></div>
             <div class="champ"><label for="ecole">École</label><input id="ecole" list="ecoles" placeholder="Pyromancie"></div>
           </div>
           <datalist id="ecoles"></datalist>
-          <div class="champ"><label for="description">Description narrative</label><textarea id="description" placeholder="Ce que voient les témoins quand le sort est lancé…"></textarea></div>
+          <div class="champ" style="margin-bottom:0"><label for="description">Description narrative</label><textarea id="description" placeholder="Ce que voient les témoins quand le sort est lancé…"></textarea></div>
         </section>
 
-        <section class="carte">
-          <div class="bloc-titre"><h2>Composantes</h2><small id="nb-compo"></small></div>
-          <div id="composantes"></div>
-          <label>Ajouter une composante</label>
-          <div class="ajout" id="ajout"></div>
+        <section style="margin-top:1rem">
+          <div class="bloc-titre"><h2>Blueprint</h2><small id="resume-blocs"></small></div>
+          <div class="plan" id="plan"></div>
         </section>
 
-        <section class="carte">
-          <div class="bloc-titre"><h2>Tissage</h2></div>
-          <div class="champs">
-            <div class="champ"><label for="portee">Portée</label><div class="avec-unite"><input id="portee" type="number" min="0" step="1"><span class="unite">m</span></div></div>
-            <div class="champ"><label for="cibles">Nombre de cibles</label><input id="cibles" type="number" min="1" step="1"></div>
-            <div class="champ"><label for="precision">Précision</label><select id="precision"></select></div>
-            <div class="champ"><label for="incantation">Incantation</label><select id="incantation"></select></div>
-            <div class="champ"><label for="focalisateur">Focalisateur</label><select id="focalisateur"></select></div>
-          </div>
-        </section>
-
-        <section class="carte">
-          <div class="bloc-titre"><h2>Lanceur</h2></div>
-          <div class="champs">
-            <div class="champ"><label for="niveau">Maîtrise</label><select id="niveau"></select></div>
-            <div class="champ"><label for="reserve">Réserve d'Éther</label><input id="reserve" type="number" min="1" step="1"></div>
-          </div>
-          <p class="aide" id="aide-niveau"></p>
-        </section>
-
-        <section class="carte">
+        <section class="carte" style="margin-top:1rem">
           <details class="reglages">
             <summary>Réglages de table</summary>
-            <p class="aide" style="margin-top:0">Ces règles d'inspiration s'appliquent à tous tes sorts. Ajuste-les pour rendre la magie plus rare ou plus accessible.</p>
+            <p class="aide" style="margin-top:0">Ces règles d'inspiration s'appliquent à tous les sorts. Ajuste-les pour rendre la magie plus rare ou plus accessible.</p>
             <div class="champs">
               <div class="champ"><label for="r-base">Progression du coût</label><input id="r-base" type="number" min="1.05" max="4" step="0.05"></div>
               <div class="champ"><label for="r-portee">Portée de référence</label><div class="avec-unite"><input id="r-portee" type="number" min="1" step="1"><span class="unite">m</span></div></div>
-              <div class="champ"><label for="r-complexite">Surcoût par composante</label><input id="r-complexite" type="number" min="0" max="2" step="0.05"></div>
             </div>
-            <p class="aide">Le coût en Éther est multiplié par la progression à chaque fois que l'énergie est ×10. À la portée de référence, l'énergie est ×4.</p>
+            <p class="aide">Le coût en Éther est multiplié par la progression chaque fois que l'énergie est ×10. À la portée de référence, l'énergie est ×4.</p>
             <div id="r-niveaux" class="champs"></div>
             <button class="bouton petit" id="r-reset" type="button">Rétablir les valeurs par défaut</button>
           </details>
         </section>
       </div>
 
-      <aside class="carte resultat" aria-live="polite">
-        <div class="surtitre" style="margin:0 0 .3rem">Coût du sort</div>
-        <div class="ether"><span class="valeur" id="res-ether">0</span><span class="unite">Éther</span></div>
-        <div class="cercle" id="res-cercle">—</div>
-        <div class="jauge"><div id="res-jauge"></div></div>
-        <div class="jauge-leg"><span>0</span><span id="res-reserve">réserve</span></div>
-        <div class="risque nul" id="res-risque">Ajoute une composante pour commencer.</div>
-        <table class="decompte"><tbody id="res-decompte"></tbody></table>
-        <div class="comparaison" id="res-comparaison"></div>
-        <div class="actions">
-          <button class="bouton principal" id="b-enregistrer" type="button">Enregistrer au grimoire</button>
-          <button class="bouton" id="b-copier" type="button">Copier la fiche</button>
-          <button class="bouton" id="b-exporter" type="button">Exporter</button>
-          <button class="bouton danger" id="b-nouveau" type="button">Nouveau sort</button>
+      <aside class="resultat">
+        <div class="carte" aria-live="polite">
+          <div class="surtitre" style="margin:0 0 .3rem">Coût du sort</div>
+          <div class="ether"><span class="valeur" id="res-ether">0</span><span class="unite">Éther</span></div>
+          <div class="cercle" id="res-cercle">—</div>
+          <div class="jauge"><div id="res-jauge"></div></div>
+          <div class="jauge-leg"><span>0</span><span id="res-reserve">réserve</span></div>
+          <div class="risque nul" id="res-risque">—</div>
+          <div class="chiffres">
+            <div class="chiffre"><small>Temps de charge</small><b id="res-charge">—</b></div>
+            <div class="chiffre"><small>Énergie puisée</small><b id="res-puisee">—</b></div>
+            <div class="chiffre"><small>Dont entretiens</small><b id="res-entretien">—</b></div>
+            <div class="chiffre"><small>Délivrée à l'impact</small><b id="res-livree">—</b></div>
+          </div>
+          <div class="comparaison" id="res-comparaison"></div>
+          <div class="bilan-alertes" id="res-alertes"></div>
+        </div>
+
+        <div class="carte courbe">
+          <div class="surtitre" style="margin:0 0 .5rem">Température du sort</div>
+          <div id="courbe"></div>
+          <div class="courbe-leg"><span><i style="background:#f0a46b"></i>température</span><span><i style="background:var(--critique)"></i>limite du lanceur</span><span><i style="background:#62d6c6"></i>lancement</span></div>
+        </div>
+
+        <div class="carte">
+          <div class="surtitre" style="margin:0 0 .6rem">Lanceur</div>
+          <div class="champ"><label for="niveau">Maîtrise</label><select id="niveau"></select></div>
+          <div class="champs">
+            <div class="champ"><label for="reserve">Réserve d'Éther</label><input id="reserve" type="number" min="1" step="1"></div>
+            <div class="champ"><label for="focalisateur">Focalisateur</label><select id="focalisateur"></select></div>
+          </div>
+          <div class="actions">
+            <button class="bouton principal" id="b-enregistrer" type="button">Enregistrer au grimoire</button>
+            <button class="bouton" id="b-copier" type="button">Copier la fiche</button>
+            <button class="bouton" id="b-exporter" type="button">Exporter</button>
+            <button class="bouton danger" id="b-nouveau" type="button">Nouveau</button>
+          </div>
         </div>
       </aside>
     </div>
   </main>
 
   <script src="assets/matrice.js"></script>
+  <script src="assets/blueprint.js"></script>
   <script src="assets/commun.js"></script>
   <script src="assets/forge.js"></script>
 </body>

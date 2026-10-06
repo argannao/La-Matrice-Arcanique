@@ -45,11 +45,12 @@
     <div id="mes-sorts" class="grille-cartes"></div>
 
     <h2>Sorts d'exemple</h2>
-    <p class="chapeau" style="margin-top:-.4rem">Ouvre-les dans la Forge pour voir comment le coût se construit, puis adapte-les.</p>
+    <p class="chapeau" style="margin-top:-.4rem">Ouvre-les dans la Forge pour voir comment le blueprint se construit — y compris une erreur de novice à corriger.</p>
     <div id="exemples" class="grille-cartes"></div>
   </main>
 
   <script src="assets/matrice.js"></script>
+  <script src="assets/blueprint.js"></script>
   <script src="assets/commun.js"></script>
   <script>
   (() => {
@@ -57,19 +58,22 @@
     const R = M.reglages();
     const COUL = { sur: 'var(--sur)', modere: 'var(--modere)', eleve: 'var(--eleve)', critique: 'var(--critique)', nul: 'var(--ligne-forte)' };
 
-    function carte(s, exemple) {
-      const r = M.evaluer(s, R);
+    function carte(s0, exemple) {
+      const s = Blueprint.normaliser(s0);
+      const r = Blueprint.simuler(s, R);
       const niv = R.niveaux[s.lanceur?.niveau]?.nom || '';
       const lien = exemple ? `forge.html?exemple=${encodeURIComponent(s.id)}` : `forge.html?id=${encodeURIComponent(s.id)}`;
+      const nd = r.alertes.filter((a) => a.niv === 'danger').length;
+      const charge = r.tempsCharge < 60 ? `${M.formatNombre(r.tempsCharge, 1)} s` : `${Math.round(r.tempsCharge / 60)} min`;
       return `<article class="carte sort">
         <div class="sort-tete">
           <div><h3>${echapper(s.nom || 'Sans nom')}</h3><div class="ecole">${echapper(s.ecole || '—')}</div></div>
           <div class="cout"><b>${r.ether}</b><small>ÉTHER</small></div>
         </div>
-        <div class="meta"><span class="point" style="background:${COUL[r.risque.niv]}"></span>${echapper(r.cercle)} · ${echapper(niv)}</div>
+        <div class="meta"><span class="point" style="background:${COUL[r.risque.niv]}"></span>${echapper(r.cercle)} · ${echapper(niv)} · charge ${charge}</div>
         ${s.description ? `<p>${echapper(s.description)}</p>` : ''}
-        <div class="compos">${(s.composantes || []).map((c) => `<span class="pastille">${echapper(M.EFFETS[c.type]?.nom || c.type)}</span>`).join('')}</div>
-        <div class="meta">${M.formatEnergie(r.ePuisee)} puisés · portée ${s.modificateurs?.portee ? s.modificateurs.portee + ' m' : 'contact'}</div>
+        <div class="compos">${s.blocs.map((b, i) => `<span class="pastille" style="border-color:${Blueprint.BLOCS[b.type]?.couleur || ''}">${i + 1}. ${echapper(b.type === 'effet' ? (M.EFFETS[b.params?.effet]?.nom || 'Effet') : (Blueprint.BLOCS[b.type]?.nom || b.type))}</span>`).join('')}</div>
+        <div class="meta">${M.formatEnergie(r.ePuisee)} puisés${r.livraison ? ` · ${M.formatEnergie(r.livraison.total)} délivrés` : ''}${nd ? ` · <span style="color:var(--critique)">⚠ ${nd} danger${nd > 1 ? 's' : ''}</span>` : ''}</div>
         <div class="actions">
           <a class="bouton petit" href="${lien}">${exemple ? 'Ouvrir dans la Forge' : 'Modifier'}</a>
           ${exemple ? '' : `<button class="bouton petit danger" type="button" data-suppr="${echapper(s.id)}">Supprimer</button>`}
@@ -105,9 +109,9 @@
       try {
         const data = JSON.parse(await f.text());
         const liste = Array.isArray(data) ? data : Array.isArray(data.sorts) ? data.sorts : [data];
-        const valides = liste.filter((s) => s && Array.isArray(s.composantes));
+        const valides = liste.filter((s) => s && (Array.isArray(s.blocs) || Array.isArray(s.composantes)));
         if (!valides.length) throw new Error();
-        valides.forEach((s) => M.enregistrer({ ...M.nouveauSort(), ...s, id: s.id || M.nouveauSort().id }));
+        valides.forEach((s) => M.enregistrer(Blueprint.normaliser({ ...s, id: s.id || M.nouveauSort().id })));
         rendre();
         notifier(`${valides.length} sort${valides.length > 1 ? 's importés' : ' importé'}.`);
       } catch { notifier('Fichier invalide : ce n\'est pas un export de la Matrice.'); }

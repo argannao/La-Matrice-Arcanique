@@ -1,10 +1,12 @@
-/* La Forge — constructeur de sorts */
+/* La Forge — éditeur de blueprints */
 (() => {
-  const M = Matrice;
+  const M = Matrice, B = Blueprint;
   const $ = (id) => document.getElementById(id);
   let R = M.reglages();
+  let insertion = null; // index où insérer le prochain bloc (palette ouverte)
+  let dernier = null;
 
-  // --- Chargement du sort --------------------------------------------------
+  // --- Chargement ------------------------------------------------------------
   const params = new URLSearchParams(location.search);
   let sort = null;
   if (params.get('id')) sort = M.grimoire().find((s) => s.id === params.get('id')) || null;
@@ -13,127 +15,143 @@
     if (ex) { sort = structuredClone(ex); sort.id = M.nouveauSort().id; }
   }
   if (!sort) sort = M.store.get('matrice.brouillon', null) || M.nouveauSort();
-  sort = { ...M.nouveauSort(), ...structuredClone(sort) };
-  sort.modificateurs = { ...M.nouveauSort().modificateurs, ...sort.modificateurs };
-  sort.lanceur = { ...M.nouveauSort().lanceur, ...sort.lanceur };
-  if (params.size) history.replaceState(null, '', location.pathname);
-
-  const remplirSelect = (el, obj, cle = 'nom') => {
-    el.innerHTML = Object.entries(obj).map(([k, v]) => `<option value="${k}">${echapper(typeof v === 'string' ? v : v[cle])}</option>`).join('');
-  };
+  sort = B.normaliser(sort);
+  if ([...params.keys()].length) history.replaceState(null, '', location.pathname);
 
   // --- Identité ----------------------------------------------------------------
-  $('ecoles').innerHTML = [...new Set(Object.values(M.EFFETS).flatMap((e) => e.ecole.split(' / ')))]
-    .map((e) => `<option value="${echapper(e)}">`).join('');
+  const ecoles = new Set(['Pyromancie', 'Cryomancie', 'Kinésie', 'Abjuration', 'Géomancie', 'Hydromancie', 'Lumen', 'Biomancie', 'Électromancie', 'Psychomancie', 'Transmutation', 'Translocation', 'Genèse']);
+  $('ecoles').innerHTML = [...ecoles].map((e) => `<option value="${echapper(e)}">`).join('');
   for (const id of ['nom', 'ecole', 'description']) {
     $(id).value = sort[id] || '';
     $(id).addEventListener('input', () => { sort[id] = $(id).value; maj(); });
   }
 
-  // --- Composantes ---------------------------------------------------------------
-  $('ajout').innerHTML = Object.entries(M.EFFETS)
-    .map(([k, e]) => `<button type="button" data-type="${k}">+ ${echapper(e.nom)}</button>`).join('');
-  $('ajout').addEventListener('click', (ev) => {
-    const b = ev.target.closest('button[data-type]');
-    if (!b) return;
-    const def = M.EFFETS[b.dataset.type];
-    sort.composantes.push({ type: b.dataset.type, params: Object.fromEntries(def.params.map((p) => [p.id, p.def])) });
-    rendreComposantes();
-    maj();
-  });
-
+  // --- Plan (blocs) -----------------------------------------------------------------
   const NATURE = { rigoureux: 'physique réelle', mixte: 'physique + inspiration', inspire: 'loi inventée' };
 
   function champHTML(prm, valeur, i) {
-    const id = `c${i}-${prm.id}`;
+    const id = `b${i}-${prm.id}`;
     if (prm.type === 'select') {
-      const o = Object.entries(prm.options).map(([k, t]) => `<option value="${k}"${String(valeur) === k ? ' selected' : ''}>${echapper(t)}</option>`).join('');
+      const o = Object.entries(prm.options).map(([k, t]) => `<option value="${echapper(k)}"${String(valeur) === k ? ' selected' : ''}>${echapper(t)}</option>`).join('');
       return `<div class="champ"><label for="${id}">${echapper(prm.label)}</label><select id="${id}" data-i="${i}" data-p="${prm.id}">${o}</select></div>`;
     }
-    const attrs = `type="number" ${prm.min !== undefined ? `min="${prm.min}"` : ''} step="${prm.step ?? 1}"`;
-    const input = `<input id="${id}" ${attrs} value="${echapper(valeur)}" data-i="${i}" data-p="${prm.id}">`;
+    const input = `<input id="${id}" type="number" ${prm.min !== undefined ? `min="${prm.min}"` : ''} step="${prm.step ?? 1}" value="${echapper(valeur)}" data-i="${i}" data-p="${prm.id}">`;
     return `<div class="champ"><label for="${id}">${echapper(prm.label)}</label>${prm.unite ? `<div class="avec-unite">${input}<span class="unite">${echapper(prm.unite)}</span></div>` : input}</div>`;
   }
 
-  function rendreComposantes() {
-    const zone = $('composantes');
-    if (!sort.composantes.length) {
-      zone.innerHTML = '<div class="vide" style="margin-bottom:1rem">Aucune composante. Choisis un premier effet ci-dessous.</div>';
-    } else {
-      zone.innerHTML = sort.composantes.map((c, i) => {
-        const def = M.EFFETS[c.type];
-        if (!def) return '';
-        return `<div class="compo">
-          <div class="compo-tete">
-            <div><h3>${echapper(def.nom)} <span class="pastille ${def.nature}">${NATURE[def.nature]}</span></h3></div>
-            <div style="display:flex;gap:.6rem;align-items:center">
-              <span class="compo-energie" id="e-${i}"></span>
-              <button class="bouton petit danger" type="button" data-suppr="${i}" aria-label="Retirer ${echapper(def.nom)}">✕</button>
-            </div>
-          </div>
-          <p class="compo-desc">${echapper(def.description)}</p>
-          <div class="formule">${echapper(def.formule)}</div>
-          <div class="champs">${def.params.map((p) => champHTML(p, c.params?.[p.id] ?? p.def, i)).join('')}</div>
-        </div>`;
-      }).join('');
-    }
-    const n = sort.composantes.length;
-    $('nb-compo').textContent = n > 1 ? `${n} composantes · complexité ×${M.formatNombre(1 + R.complexite * (n - 1), 2)}` : '';
+  function noeudHTML(bloc, i, n) {
+    const def = B.BLOCS[bloc.type];
+    if (!def) return '';
+    const vals = B.valeurs(bloc);
+    const champs = B.parametres(bloc).filter((p) => !p.si || p.si(vals)).map((p) => champHTML(p, bloc.params?.[p.id] ?? p.def, i)).join('');
+    const sousEffet = bloc.type === 'effet' ? M.EFFETS[vals.effet] : null;
+    const formule = sousEffet ? sousEffet.formule : def.formule;
+    return `<article class="noeud" id="n-${i}" style="--c:${def.couleur}">
+      <div class="noeud-tete">
+        <h3><span class="num">${String(i + 1).padStart(2, '0')}</span>${echapper(def.nom)}<span class="pastille ${def.nature}">${NATURE[def.nature]}</span></h3>
+        <div class="noeud-outils">
+          <button type="button" data-act="haut" data-i="${i}" ${i === 0 ? 'disabled' : ''} aria-label="Monter">▲</button>
+          <button type="button" data-act="bas" data-i="${i}" ${i === n - 1 ? 'disabled' : ''} aria-label="Descendre">▼</button>
+          <button type="button" data-act="suppr" data-i="${i}" aria-label="Retirer">✕</button>
+        </div>
+      </div>
+      <p class="noeud-desc">${echapper(sousEffet ? sousEffet.description : def.description)}</p>
+      ${formule ? `<div class="formule">${echapper(formule)}</div>` : ''}
+      ${champs ? `<div class="champs">${champs}</div>` : ''}
+      <div class="etat" id="etat-${i}"></div>
+      <ul class="alertes" id="al-${i}"></ul>
+    </article>`;
   }
 
-  $('composantes').addEventListener('input', (ev) => {
+  function paletteHTML(index) {
+    const n = sort.blocs.length;
+    const titre = n === 0 ? 'Commence par un bloc (l\'Ancrage est le point de départ) :' : index >= n ? 'Ajouter un bloc à la fin :' : `Insérer un bloc en position ${index + 1} :`;
+    return `<div class="palette" id="palette"><p>${titre}</p><div class="palette-grille">${
+      Object.entries(B.BLOCS).map(([k, d]) => `<button type="button" data-ajout="${k}" style="--c:${d.couleur}">${echapper(d.nom)}<small>${echapper(d.ecole)}</small></button>`).join('')
+    }</div></div>`;
+  }
+
+  function rendrePlan() {
+    const n = sort.blocs.length;
+    let html = '';
+    if (n === 0) html = paletteHTML(0);
+    sort.blocs.forEach((b, i) => {
+      html += noeudHTML(b, i, n);
+      const fin = i === n - 1;
+      html += `<div class="lien"><span class="dt" id="dt-${i}"></span><button type="button" data-ins="${i + 1}" class="${insertion === i + 1 ? 'actif' : ''}" aria-label="${fin ? 'Ajouter un bloc' : 'Insérer un bloc ici'}">${insertion === i + 1 ? '×' : '+'}</button></div>`;
+      if (insertion === i + 1) html += paletteHTML(i + 1) + (fin ? '' : '<div class="lien"></div>');
+    });
+    $('plan').innerHTML = html;
+  }
+
+  $('plan').addEventListener('click', (ev) => {
+    const ins = ev.target.closest('[data-ins]');
+    if (ins) { const k = Number(ins.dataset.ins); insertion = insertion === k ? null : k; rendrePlan(); maj(); return; }
+    const aj = ev.target.closest('[data-ajout]');
+    if (aj) {
+      const idx = insertion ?? sort.blocs.length;
+      sort.blocs.splice(idx, 0, B.nouveauBloc(aj.dataset.ajout));
+      insertion = null;
+      rendrePlan(); maj();
+      document.getElementById(`n-${idx}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      return;
+    }
+    const act = ev.target.closest('[data-act]');
+    if (act) {
+      const i = Number(act.dataset.i);
+      if (act.dataset.act === 'suppr') sort.blocs.splice(i, 1);
+      if (act.dataset.act === 'haut' && i > 0) [sort.blocs[i - 1], sort.blocs[i]] = [sort.blocs[i], sort.blocs[i - 1]];
+      if (act.dataset.act === 'bas' && i < sort.blocs.length - 1) [sort.blocs[i + 1], sort.blocs[i]] = [sort.blocs[i], sort.blocs[i + 1]];
+      insertion = null;
+      rendrePlan(); maj();
+    }
+  });
+
+  $('plan').addEventListener('input', (ev) => {
     const el = ev.target;
     if (!el.dataset.p) return;
-    const c = sort.composantes[Number(el.dataset.i)];
-    c.params[el.dataset.p] = el.tagName === 'SELECT' ? el.value : (el.value === '' ? 0 : Number(el.value));
-    maj();
-  });
-  $('composantes').addEventListener('click', (ev) => {
-    const b = ev.target.closest('[data-suppr]');
-    if (!b) return;
-    sort.composantes.splice(Number(b.dataset.suppr), 1);
-    rendreComposantes();
+    const bloc = sort.blocs[Number(el.dataset.i)];
+    if (el.tagName === 'SELECT') {
+      bloc.params[el.dataset.p] = el.value;
+      if (bloc.type === 'effet' && el.dataset.p === 'effet') {
+        bloc.params = { effet: el.value };
+        for (const prm of B.parametres(bloc)) bloc.params[prm.id] ??= prm.def;
+      }
+      rendrePlan();
+      document.getElementById(el.id)?.focus();
+    } else {
+      bloc.params[el.dataset.p] = el.value === '' ? 0 : Number(el.value);
+    }
     maj();
   });
 
-  // --- Tissage & lanceur -----------------------------------------------------------
-  remplirSelect($('precision'), Object.fromEntries(Object.entries(M.PRECISION).map(([k, v]) => [k, `${v.nom} (×${M.formatNombre(v.f, 2)})`])));
-  remplirSelect($('incantation'), Object.fromEntries(Object.entries(M.INCANTATION).map(([k, v]) => [k, `${v.nom} (×${M.formatNombre(v.f, 2)})`])));
-  remplirSelect($('focalisateur'), Object.fromEntries(Object.entries(M.FOCALISATEUR).map(([k, v]) => [k, `${v.nom} (×${M.formatNombre(v.f, 2)})`])));
-
-  for (const id of ['portee', 'cibles', 'precision', 'incantation', 'focalisateur']) {
-    $(id).value = sort.modificateurs[id];
-    $(id).addEventListener('input', () => {
-      sort.modificateurs[id] = $(id).type === 'number' ? Number($(id).value) : $(id).value;
-      maj();
-    });
-  }
+  // --- Lanceur -----------------------------------------------------------------------
+  const remplir = (el, obj) => { el.innerHTML = Object.entries(obj).map(([k, t]) => `<option value="${k}">${echapper(t)}</option>`).join(''); };
+  remplir($('focalisateur'), Object.fromEntries(Object.entries(M.FOCALISATEUR).map(([k, v]) => [k, `${v.nom} (×${M.formatNombre(v.f, 2)})`])));
+  $('focalisateur').value = sort.lanceur.focalisateur;
+  $('focalisateur').addEventListener('input', () => { sort.lanceur.focalisateur = $('focalisateur').value; maj(); });
 
   function rendreNiveaux() {
-    remplirSelect($('niveau'), Object.fromEntries(Object.entries(R.niveaux).map(([k, v]) => [k, `${v.nom} — rendement ${Math.round(v.rendement * 100)} %`])));
-    $('niveau').value = R.niveaux[sort.lanceur.niveau] ? sort.lanceur.niveau : 'adepte';
-    sort.lanceur.niveau = $('niveau').value;
-    $('reserve').placeholder = R.niveaux[sort.lanceur.niveau].reserve;
+    remplir($('niveau'), Object.fromEntries(Object.entries(R.niveaux).map(([k, v]) => [k, `${v.nom} — rendement ${Math.round(v.rendement * 100)} %`])));
+    if (!R.niveaux[sort.lanceur.niveau]) sort.lanceur.niveau = 'adepte';
+    $('niveau').value = sort.lanceur.niveau;
+    $('reserve').placeholder = `${R.niveaux[sort.lanceur.niveau].reserve} (défaut)`;
     $('reserve').value = sort.lanceur.reserve ?? '';
-    const n = R.niveaux[sort.lanceur.niveau];
-    $('aide-niveau').textContent = `Un ${n.nom.toLowerCase()} ne transmet que ${Math.round(n.rendement * 100)} % de l'énergie qu'il puise. Réserve par défaut : ${n.reserve} Éther (laisser vide pour l'utiliser).`;
   }
   $('niveau').addEventListener('input', () => { sort.lanceur.niveau = $('niveau').value; rendreNiveaux(); maj(); });
   $('reserve').addEventListener('input', () => { sort.lanceur.reserve = $('reserve').value === '' ? null : Number($('reserve').value); maj(); });
 
-  // --- Réglages de table -------------------------------------------------------------
+  // --- Réglages de table --------------------------------------------------------------
   function rendreReglages() {
     $('r-base').value = R.base;
     $('r-portee').value = R.porteeRef;
-    $('r-complexite').value = R.complexite;
     $('r-niveaux').innerHTML = Object.entries(R.niveaux).map(([k, n]) => `
       <div class="champ"><label for="rr-${k}">${echapper(n.nom)} — rendement</label><div class="avec-unite"><input id="rr-${k}" type="number" min="1" max="100" step="1" value="${Math.round(n.rendement * 100)}" data-niv="${k}" data-champ="rendement"><span class="unite">%</span></div></div>
       <div class="champ"><label for="rv-${k}">${echapper(n.nom)} — réserve</label><input id="rv-${k}" type="number" min="1" step="1" value="${n.reserve}" data-niv="${k}" data-champ="reserve"></div>`).join('');
   }
-  function sauverReglages() { M.store.set('matrice.reglages', R); rendreNiveaux(); rendreComposantes(); maj(); }
+  const sauverReglages = () => { M.store.set('matrice.reglages', R); rendreNiveaux(); maj(); };
   $('r-base').addEventListener('input', () => { const v = Number($('r-base').value); if (v > 1) { R.base = v; sauverReglages(); } });
   $('r-portee').addEventListener('input', () => { const v = Number($('r-portee').value); if (v > 0) { R.porteeRef = v; sauverReglages(); } });
-  $('r-complexite').addEventListener('input', () => { const v = Number($('r-complexite').value); if (v >= 0) { R.complexite = v; sauverReglages(); } });
   $('r-niveaux').addEventListener('input', (ev) => {
     const el = ev.target, v = Number(el.value);
     if (!el.dataset.niv || !(v > 0)) return;
@@ -143,73 +161,135 @@
   $('r-reset').addEventListener('click', () => {
     R = structuredClone(M.REGLAGES_DEFAUT);
     M.store.set('matrice.reglages', R);
-    rendreReglages(); rendreNiveaux(); rendreComposantes(); maj();
+    rendreReglages(); rendreNiveaux(); maj();
     notifier('Réglages par défaut rétablis.');
   });
 
-  // --- Résultat ------------------------------------------------------------------------
+  // --- Mise à jour du résultat ----------------------------------------------------------
   const COULEURS = { sur: 'var(--sur)', modere: 'var(--modere)', eleve: 'var(--eleve)', critique: 'var(--critique)', nul: 'var(--ligne-forte)' };
-  let dernier = null;
+  const fmtT = (T) => `${M.formatNombre(T, 0)} °C`;
+  const fmtS = (s) => s < 60 ? `${M.formatNombre(s, s < 10 ? 1 : 0)} s` : `${Math.floor(s / 60)} min ${Math.round(s % 60)} s`;
 
   function maj() {
-    const r = M.evaluer(sort, R);
+    const r = B.simuler(sort, R);
     dernier = r;
-    r.details.forEach((d, i) => { const el = $(`e-${i}`); if (el) el.textContent = M.formatEnergie(d.energie); });
+
+    r.etapes.forEach((et, i) => {
+      const s = et.etat, z = $(`etat-${i}`);
+      if (!z) return;
+      const puces = [`<span class="puce e">+${M.formatEnergie(et.energie)}</span>`, `<span class="puce">t = ${fmtS(s.t)}</span>`];
+      if (s.matiere) {
+        const ecart = s.T - B.AMBIANTE;
+        puces.push(`<span class="puce ${ecart > 30 ? 'chaud' : ecart < -15 ? 'froid' : ''}">${fmtT(s.T)}</span>`);
+        puces.push(`<span class="puce">${echapper(M.MATERIAUX[s.matiere.type].nom)} ${M.formatNombre(s.matiere.masse, s.matiere.masse < 1 ? 3 : 1)} kg</span>`);
+      }
+      if (s.protection && !s.lance) puces.push(`<span class="puce ok">protégé ±${s.protection} °C</span>`);
+      if (s.confine && !s.libere) puces.push('<span class="puce ok">confiné</span>');
+      if (s.lance && !s.libere) puces.push(`<span class="puce">en vol · ${s.v} m/s</span>`);
+      if (s.libere) puces.push('<span class="puce">libéré</span>');
+      z.innerHTML = puces.join('');
+      $(`al-${i}`).innerHTML = et.alertes.map((a) => `<li class="${a.niv}">${echapper(a.txt)}</li>`).join('');
+      $(`n-${i}`).classList.toggle('danger', et.alertes.some((a) => a.niv === 'danger'));
+      const dt = $(`dt-${i}`);
+      if (dt) dt.textContent = et.duree > 0 ? `${fmtS(et.duree)}` : '';
+    });
+
+    const n = sort.blocs.length;
+    $('resume-blocs').textContent = n ? `${n} bloc${n > 1 ? 's' : ''} · durée ${fmtS(r.duree)}` : '';
 
     $('res-ether').textContent = M.formatNombre(r.ether);
     $('res-cercle').textContent = r.ether ? r.cercle : '—';
     $('res-reserve').textContent = `réserve ${r.reserve}`;
-    const jauge = $('res-jauge');
-    jauge.style.width = `${Math.min(100, r.ratio * 100)}%`;
-    jauge.style.backgroundColor = COULEURS[r.risque.niv];
+    $('res-jauge').style.width = `${Math.min(100, r.ratio * 100)}%`;
+    $('res-jauge').style.backgroundColor = COULEURS[r.risque.niv];
     $('res-risque').className = `risque ${r.risque.niv}`;
-    $('res-risque').textContent = sort.composantes.length ? r.risque.txt : 'Ajoute une composante pour commencer.';
+    $('res-risque').textContent = r.risque.txt;
+    $('res-charge').textContent = n ? fmtS(r.tempsCharge) : '—';
+    $('res-puisee').textContent = M.formatEnergie(r.ePuisee);
+    $('res-entretien').textContent = M.formatEnergie(r.eEntretien * r.focal / r.rendement);
+    $('res-livree').textContent = r.livraison ? M.formatEnergie(r.livraison.total) : '—';
+    $('res-comparaison').textContent = r.livraison && r.livraison.total > 0
+      ? `À l'impact : ${comparer(r.livraison.total)}.`
+      : r.ePuisee > 0 ? `Le lanceur puise ${comparer(r.ePuisee)}.` : '';
 
-    const f = r.facteurs, x = (v) => `×${M.formatNombre(v, v < 10 ? 2 : 1)}`;
-    const lignes = [
-      ['Énergie des effets', M.formatEnergie(r.eEffet)],
-      [`Portée (${sort.modificateurs.portee || 0} m)`, x(f.portee)],
-      f.cibles > 1 ? [`Cibles`, x(f.cibles)] : null,
-      ['Précision', x(f.precision)],
-      f.complexite > 1 ? ['Complexité', x(f.complexite)] : null,
-      ['Incantation', x(f.incantation)],
-      f.focalisateur < 1 ? ['Focalisateur', x(f.focalisateur)] : null,
-      ['Énergie tissée', M.formatEnergie(r.eTissee)],
-      [`Rendement (${Math.round(r.rendement * 100)} %)`, `÷${M.formatNombre(r.rendement, 2)}`],
-    ].filter(Boolean);
-    $('res-decompte').innerHTML = lignes.map(([a, b]) => `<tr><td>${echapper(a)}</td><td>${echapper(b)}</td></tr>`).join('')
-      + `<tr class="total"><td>Énergie puisée</td><td>${M.formatEnergie(r.ePuisee)}</td></tr>`;
-    $('res-comparaison').textContent = r.ePuisee > 0 ? `${r.comparaison} · ${M.formatNombre(r.kcal, r.kcal < 10 ? 1 : 0)} kcal` : '';
+    const nd = r.alertes.filter((a) => a.niv === 'danger').length, na = r.alertes.filter((a) => a.niv === 'attention').length;
+    const ba = $('res-alertes');
+    if (!n) { ba.className = 'bilan-alertes'; ba.textContent = ''; }
+    else if (nd + na === 0) { ba.className = 'bilan-alertes ok'; ba.textContent = '✓ Blueprint cohérent : aucun danger détecté.'; }
+    else { ba.className = 'bilan-alertes ko'; ba.textContent = `${nd ? `⚠ ${nd} danger${nd > 1 ? 's' : ''}` : ''}${nd && na ? ' · ' : ''}${na ? `${na} point${na > 1 ? 's' : ''} d'attention` : ''} — voir les blocs signalés.`; }
 
+    dessinerCourbe(r);
     M.store.set('matrice.brouillon', sort);
+  }
+
+  function comparer(e) {
+    let ref = M.ECHELLE[0];
+    for (const x of M.ECHELLE) if (x.e <= e) ref = x;
+    const k = e / ref.e;
+    return `≈ ${M.formatNombre(k, k < 10 ? 1 : 0)} × ${ref.txt}`;
+  }
+
+  function dessinerCourbe(r) {
+    const W = 340, H = 170, g = 34, d = 10, h = 8, b = 22;
+    const pts = r.courbe;
+    if (!pts.length || r.duree <= 0 || !r.etapes.some((e) => e.etat.matiere)) {
+      $('courbe').innerHTML = '<div class="vide" style="padding:1.2rem;font-size:.85rem">La courbe apparaît dès qu\'une matière est rassemblée.</div>';
+      return;
+    }
+    const fin = r.etatFinal;
+    const avant = r.etapes.filter((e) => !e.etat.lance);
+    const protMax = Math.max(0, ...avant.map((e) => e.etat.protection));
+    const tol = B.TOLERANCE[fin.ancre];
+    const limite = tol ? Math.max(tol.haut, protMax) : null;
+    const Ts = pts.map((p) => p.T).concat([B.AMBIANTE]);
+    let tMin = Math.min(...Ts), tMax = Math.max(...Ts);
+    if (limite !== null && limite < tMax * 1.6) tMax = Math.max(tMax, limite);
+    if (tMax - tMin < 20) tMax = tMin + 20;
+    const pad = (tMax - tMin) * 0.08; tMax += pad; tMin -= pad;
+    const x = (t) => g + (t / r.duree) * (W - g - d);
+    const y = (T) => h + (1 - (T - tMin) / (tMax - tMin)) * (H - h - b);
+    const chemin = pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)},${y(p.T).toFixed(1)}`).join('');
+    const reperes = r.etapes.filter((e) => e.duree > 0).map((e) => `<line x1="${x(e.debut)}" x2="${x(e.debut)}" y1="${h}" y2="${H - b}" stroke="#2b3045" stroke-dasharray="2 3"/><text x="${x(e.debut) + 2}" y="${h + 8}" font-size="8" fill="#6f6d80" font-family="IBM Plex Mono, monospace">${e.index + 1}</text>`).join('');
+    const tick = (T) => `<text x="${g - 4}" y="${y(T) + 3}" font-size="9" text-anchor="end" fill="#6f6d80" font-family="IBM Plex Mono, monospace">${Math.round(T)}°</text>`;
+    const lim = limite !== null && limite <= tMax ? `<line x1="${g}" x2="${x(r.tempsCharge)}" y1="${y(limite)}" y2="${y(limite)}" stroke="#e2565a" stroke-width="1.2" stroke-dasharray="5 3"/>` : '';
+    const lance = fin.lance ? `<line x1="${x(r.tempsCharge)}" x2="${x(r.tempsCharge)}" y1="${h}" y2="${H - b}" stroke="#62d6c6" stroke-width="1.2"/>` : '';
+    $('courbe').innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Température du sort au cours du temps">
+      <line x1="${g}" x2="${W - d}" y1="${H - b}" y2="${H - b}" stroke="#3c4361"/>
+      <line x1="${g}" x2="${g}" y1="${h}" y2="${H - b}" stroke="#3c4361"/>
+      ${reperes}${lim}${lance}
+      ${tick(tMax - pad)}${tick(B.AMBIANTE)}
+      <path d="${chemin}" fill="none" stroke="#f0a46b" stroke-width="2" stroke-linejoin="round"/>
+      <text x="${g}" y="${H - 6}" font-size="9" fill="#6f6d80" font-family="IBM Plex Mono, monospace">0 s</text>
+      <text x="${W - d}" y="${H - 6}" font-size="9" text-anchor="end" fill="#6f6d80" font-family="IBM Plex Mono, monospace">${fmtS(r.duree)}</text>
+    </svg>`;
   }
 
   // --- Actions -------------------------------------------------------------------------
   function fiche() {
     const r = dernier;
-    const lignes = [
+    const L = [
       `✦ ${sort.nom || 'Sort sans nom'}${sort.ecole ? ` — ${sort.ecole}` : ''}`,
-      `${r.cercle} · ${r.ether} Éther (lanceur ${R.niveaux[sort.lanceur.niveau].nom.toLowerCase()}, réserve ${r.reserve})`,
-      `Portée : ${sort.modificateurs.portee ? sort.modificateurs.portee + ' m' : 'contact'} · Cibles : ${sort.modificateurs.cibles} · Incantation : ${M.INCANTATION[sort.modificateurs.incantation].nom}`,
+      `${r.cercle} · ${r.ether} Éther (${R.niveaux[sort.lanceur.niveau].nom.toLowerCase()}, réserve ${r.reserve}) · charge ${fmtS(r.tempsCharge)}`,
       '',
-      ...sort.composantes.map((c, i) => {
-        const def = M.EFFETS[c.type];
-        const p = def.params.map((prm) => {
-          const v = c.params[prm.id];
-          return `${prm.label.toLowerCase()} ${prm.type === 'select' ? prm.options[v] : v + (prm.unite ? ' ' + prm.unite : '')}`;
+      ...sort.blocs.map((b, i) => {
+        const def = B.BLOCS[b.type];
+        const vals = B.valeurs(b);
+        const p = B.parametres(b).filter((prm) => !prm.si || prm.si(vals)).map((prm) => {
+          const v = b.params[prm.id] ?? prm.def;
+          return prm.type === 'select' ? prm.options[v] : `${v} ${prm.unite || ''}`.trim();
         }).join(', ');
-        return `• ${def.nom} : ${p} → ${M.formatEnergie(r.details[i].energie)}`;
+        return `${i + 1}. ${def.nom}${p ? ` (${p})` : ''}`;
       }),
       '',
       sort.description || '',
-      `Énergie puisée : ${M.formatEnergie(r.ePuisee)} (${r.comparaison})`,
+      r.livraison ? `Énergie délivrée : ${M.formatEnergie(r.livraison.total)}` : '',
       `Risque : ${r.risque.txt}`,
     ];
-    return lignes.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    return L.join('\n').replace(/\n{3,}/g, '\n\n').trim();
   }
 
   $('b-enregistrer').addEventListener('click', () => {
-    if (!sort.composantes.length) return notifier('Ajoute au moins une composante avant d\'enregistrer.');
+    if (!sort.blocs.length) return notifier('Le blueprint est vide.');
     if (!sort.nom.trim()) { $('nom').focus(); return notifier('Donne un nom à ton sort.'); }
     notifier(M.enregistrer(sort) ? `« ${sort.nom} » est inscrit au grimoire.` : 'Impossible d\'enregistrer : le stockage du navigateur est indisponible.');
   });
@@ -221,15 +301,17 @@
     telecharger(`${(sort.nom || 'sort').replace(/[^\p{L}\p{N}-]+/gu, '_')}.json`, JSON.stringify(sort, null, 2));
   });
   $('b-nouveau').addEventListener('click', () => {
-    if (sort.composantes.length && !confirm('Commencer un nouveau sort ? Le sort en cours non enregistré sera perdu.')) return;
-    sort = M.nouveauSort();
+    if (sort.blocs.length > 1 && !confirm('Commencer un nouveau sort ? Le blueprint en cours non enregistré sera perdu.')) return;
+    sort = B.normaliser(M.nouveauSort());
     for (const id of ['nom', 'ecole', 'description']) $(id).value = '';
-    for (const id of ['portee', 'cibles', 'precision', 'incantation', 'focalisateur']) $(id).value = sort.modificateurs[id];
-    rendreNiveaux(); rendreComposantes(); maj();
+    $('focalisateur').value = sort.lanceur.focalisateur;
+    insertion = 1;
+    rendreNiveaux(); rendrePlan(); maj();
   });
 
+  if (sort.blocs.length <= 1) insertion = sort.blocs.length;
   rendreReglages();
   rendreNiveaux();
-  rendreComposantes();
+  rendrePlan();
   maj();
 })();
