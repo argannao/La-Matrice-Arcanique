@@ -311,6 +311,22 @@
     rendreNiveaux(); rendrePlan(); maj();
   });
 
+  // --- Exemples accessibles depuis la Forge ---------------------------------------------
+  $('exemples-forge').innerHTML = EXEMPLES.map((ex) => `<button class="bouton petit" type="button" data-ex="${echapper(ex.id)}">${echapper(ex.nom)}</button>`).join('');
+  $('exemples-forge').addEventListener('click', (ev) => {
+    const btn = ev.target.closest('[data-ex]');
+    if (!btn) return;
+    const ex = EXEMPLES.find((x) => x.id === btn.dataset.ex);
+    if (!ex) return;
+    if (sort.blocs.length > 1 && !confirm(`Charger l'exemple « ${ex.nom} » ? Le blueprint en cours non enregistré sera remplacé.`)) return;
+    sort = B.normaliser({ ...structuredClone(ex), id: M.nouveauSort().id });
+    for (const id of ['nom', 'ecole', 'description']) $(id).value = sort[id] || '';
+    $('focalisateur').value = sort.lanceur.focalisateur;
+    insertion = null;
+    rendreNiveaux(); rendrePlan(); maj();
+    notifier(`Exemple « ${ex.nom} » chargé.`);
+  });
+
   if (sort.blocs.length <= 1) insertion = sort.blocs.length;
   rendreReglages();
   rendreNiveaux();
