@@ -18,6 +18,8 @@ assets/
   matrice.js   données de base (matériaux, effets directs, réglages, formatage, stockage)
   blueprint.js blocs du blueprint, simulation, coût, blueprints d'exemple
   commun.js    barre de navigation, pied de page, notifications
+  compte.js    comptes (Google, GitHub, e-mail) et synchronisation du grimoire via Firebase
+  firebase-config.js  configuration Firebase (null = site sans comptes)
   forge.js     logique de la Forge
   style.css    style commun
 ```
@@ -27,3 +29,18 @@ Ajouter un bloc : une entrée dans `BLOCS` de `assets/blueprint.js` (nom, école
 ## Publication
 
 Site 100 % statique, publiable sur GitHub Pages : *Settings → Pages → Deploy from a branch → `main` / root*.
+
+## Comptes (Firebase)
+
+Sans configuration, le site fonctionne en local : les sorts restent dans le navigateur. Pour activer les comptes :
+
+1. **Créer le projet** sur [console.firebase.google.com](https://console.firebase.google.com) → *Ajouter un projet* (Google Analytics facultatif).
+2. **Ajouter une application Web** (icône `</>`), sans Firebase Hosting. Copier l'objet `firebaseConfig` affiché dans `assets/firebase-config.js` à la place de `null`.
+3. **Authentication → Méthode de connexion**, activer :
+   - *Google* ;
+   - *Adresse e-mail/Mot de passe* ;
+   - *GitHub* : créer d'abord une OAuth App sur GitHub (*Settings → Developer settings → OAuth Apps → New OAuth App*), avec comme *Homepage URL* `https://argannao.github.io/La-Matrice-Arcanique/` et comme *Authorization callback URL* l'URL indiquée par Firebase (`https://<projet>.firebaseapp.com/__/auth/handler`), puis reporter le *Client ID* et le *Client secret* dans Firebase.
+4. **Authentication → Paramètres → Domaines autorisés** : ajouter `argannao.github.io`.
+5. **Firestore Database → Créer une base de données** en mode production (région Europe, par ex. `europe-west9` Paris), puis onglet *Règles* : coller le contenu de `firestore.rules` et publier.
+
+Les sorts sont stockés dans `users/{uid}/sorts/{id}` ; chaque utilisateur n'a accès qu'aux siens. Les sorts créés sans compte sont rattachés au compte à la première connexion.

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/style.css?v=7">
+  <link rel="stylesheet" href="assets/style.css?v=8">
   <style>
     .outils { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; justify-content: space-between; margin: 1.5rem 0 1rem; }
     .outils input[type=search] { max-width: 320px; }
@@ -30,7 +30,8 @@
   <main class="page">
     <div class="surtitre">Module</div>
     <h1>Le Grimoire</h1>
-    <p class="chapeau">Tes sorts sont conservés dans ce navigateur. Exporte-les pour les partager avec ta table ou les retrouver sur un autre appareil.</p>
+    <p class="chapeau">Tes sorts sont conservés dans ce navigateur, ou dans ton compte si tu es connecté. Exporte-les pour les partager avec ta table ou les retrouver sur un autre appareil.</p>
+    <p class="statut-compte" id="statut-compte"></p>
 
     <div class="outils">
       <input type="search" id="recherche" placeholder="Rechercher un sort, une école…" aria-label="Rechercher">
@@ -49,9 +50,9 @@
     <div id="exemples" class="grille-cartes"></div>
   </main>
 
-  <script src="assets/matrice.js?v=7"></script>
-  <script src="assets/blueprint.js?v=7"></script>
-  <script src="assets/commun.js?v=7"></script>
+  <script src="assets/matrice.js?v=8"></script>
+  <script src="assets/blueprint.js?v=8"></script>
+  <script src="assets/commun.js?v=8"></script>
   <script>
   (() => {
     const M = Matrice;
@@ -92,6 +93,7 @@
     }
 
     document.getElementById('recherche').addEventListener('input', rendre);
+    window.addEventListener('matrice:grimoire', rendre);
     document.getElementById('mes-sorts').addEventListener('click', (ev) => {
       const b = ev.target.closest('[data-suppr]');
       if (!b) return;
@@ -120,5 +122,6 @@
     rendre();
   })();
   </script>
+  <script type="module" src="assets/compte.js?v=8"></script>
 </body>
 </html>

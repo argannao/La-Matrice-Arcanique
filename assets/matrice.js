@@ -309,21 +309,33 @@ const Matrice = (() => {
     };
   }
 
-  function grimoire() { return store.get('matrice.grimoire', []); }
+  // Le grimoire est mis en cache localement, séparément pour chaque compte (et un grimoire anonyme sans compte).
+  // Le dernier compte connecté est repris dès le chargement, avant même que Firebase ait répondu.
+  const CLE_ANONYME = 'matrice.grimoire';
+  let cleGrimoire = (() => { const u = store.get('matrice.dernierCompte', null); return u ? `${CLE_ANONYME}.${u}` : CLE_ANONYME; })();
+  function utiliserCompte(uid) {
+    cleGrimoire = uid ? `${CLE_ANONYME}.${uid}` : CLE_ANONYME;
+    if (uid) store.set('matrice.dernierCompte', uid);
+    else { try { localStorage.removeItem('matrice.dernierCompte'); } catch { /* stockage indisponible */ } }
+  }
+  function grimoireAnonyme() { return store.get(CLE_ANONYME, []); }
+  function viderGrimoireAnonyme() { return store.set(CLE_ANONYME, []); }
+  function remplacerGrimoire(liste) { return store.set(cleGrimoire, liste); }
+  function grimoire() { return store.get(cleGrimoire, []); }
   function enregistrer(sort) {
     const g = grimoire();
     const i = g.findIndex((s) => s.id === sort.id);
     const copie = structuredClone(sort);
     copie.modifie = new Date().toISOString();
     if (i >= 0) g[i] = copie; else g.push(copie);
-    return store.set('matrice.grimoire', g);
+    return store.set(cleGrimoire, g);
   }
-  function supprimer(id) { return store.set('matrice.grimoire', grimoire().filter((s) => s.id !== id)); }
+  function supprimer(id) { return store.set(cleGrimoire, grimoire().filter((s) => s.id !== id)); }
 
   return {
     G, C, MATERIAUX, EFFETS, PRECISION, INCANTATION, FOCALISATEUR, CERCLES, ECHELLE, REGLAGES_DEFAUT,
     store, reglages, evaluer, energieComposante, formatEnergie, formatNombre, nouveauSort,
-    grimoire, enregistrer, supprimer,
+    grimoire, enregistrer, supprimer, utiliserCompte, grimoireAnonyme, viderGrimoireAnonyme, remplacerGrimoire,
   };
 })();
 
