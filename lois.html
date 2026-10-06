@@ -33,6 +33,7 @@
     <nav class="sommaire">
       <a href="#blueprint">Le blueprint</a>
       <a href="#exemple">Exemple : la boule de feu</a>
+      <a href="#ancrages">Les ancrages</a>
       <a href="#blocs">Les blocs</a>
       <a href="#thermique">Chaleur, états, combustion</a>
       <a href="#dangers">Dangers</a>
@@ -60,6 +61,15 @@
       <div class="etape"><span class="n">6</span><div><h3>Imprégner de mouvement : 25 m/s vers une cible à 20 m</h3><p>La sphère quitte la main (la protection se relâche) et vole 0,8 s.</p></div></div>
       <div class="etape"><span class="n">7</span><div><h3>Libération en explosion</h3><p>Le confinement se rompt : environ 1,6 MJ se déchargent sur la zone.</p></div></div>
       <p><a href="forge.html?exemple=ex-boule-de-feu">Ouvrir ce blueprint dans la Forge →</a> · <a href="forge.html?exemple=ex-flamme-nue">voir la version ratée →</a></p>
+    </section>
+
+    <section id="ancrages">
+      <h2>Les ancrages</h2>
+      <p>L'ancrage décide où le sort naît. Plus il est proche, moins il coûte… et plus le lanceur risque d'encaisser ce qu'il fabrique. Les ancrages à distance multiplient le coût de chaque bloc par (1 + d / portée)², la portée étant allongée par certains relais.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Ancrage</th><th>Le corps supporte</th><th>Coût</th><th>Particularité</th></tr></thead>
+        <tbody id="t-ancrages"></tbody>
+      </table></div>
     </section>
 
     <section id="blocs">
@@ -111,8 +121,7 @@
       <div class="table-wrap"><table>
         <thead><tr><th>Situation</th><th>Conséquence</th></tr></thead>
         <tbody>
-          <tr><td>Sort ancré dans la main au-delà de 50 °C (ou sous −10 °C) sans protection suffisante</td><td>Brûlure (ou gelure) du lanceur</td></tr>
-          <tr><td>Sort ancré devant soi au-delà de 250 °C (ou sous −60 °C)</td><td>Brûlure par rayonnement</td></tr>
+          <tr><td>Sort ancré près de soi au-delà de ce que le corps supporte (voir <a href="#ancrages">les ancrages</a>) sans protection suffisante</td><td>Brûlure (ou gelure) du lanceur</td></tr>
           <tr><td>Chauffer sans matière</td><td>La chaleur se perd dans le vide</td></tr>
           <tr><td>Lancer un gaz brûlant sans confinement</td><td>Il se disperse et arrive refroidi</td></tr>
           <tr><td>Libérer le sort sans l'avoir lancé</td><td>Le lanceur encaisse l'explosion</td></tr>
@@ -206,6 +215,12 @@
     ])).join('');
     $('t-combustibles').innerHTML = Object.entries(B.COMBUSTIBLES).map(([k, c]) => ligne([
       M.MATERIAUX[k]?.nom || k, { t: M.formatEnergie(c.pci) + '/kg', num: true }, { t: c.ignition + ' °C', num: true }, { t: c.flamme + ' °C', num: true },
+    ])).join('');
+    $('t-ancrages').innerHTML = Object.values(B.ANCRAGES).map((a) => ligne([
+      a.nom,
+      { t: a.tol ? `${M.formatNombre(a.tol.bas)} à ${M.formatNombre(a.tol.haut)} °C` : 'hors d\'atteinte', num: true },
+      { t: (a.variable ? `selon distance${a.porteeMult ? ` (÷${a.porteeMult})` : ''}` : '—') + (a.coef ? ` · ×${M.formatNombre(a.coef, 2)}` : ''), num: true },
+      { html: `<small style="color:var(--texte-doux)">${echapper(a.note || '')}</small>` },
     ])).join('');
     $('t-formes').innerHTML = Object.values(B.FORMES).map((f) => ligne([f.nom, { t: '×' + M.formatNombre(f.pertes, 1), num: true }])).join('');
 

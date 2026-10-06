@@ -11,8 +11,40 @@ const Blueprint = (() => {
   const opts = (obj) => Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, v.nom]));
   const nomMat = (t) => M.MATERIAUX[t]?.nom || t;
 
-  // Tolérance du corps sans protection, selon la distance à l'ancrage
-  const TOLERANCE = { main: { haut: 50, bas: -10 }, devant: { haut: 250, bas: -60 } };
+  // --- Ancrages ------------------------------------------------------------
+  // zone : « tenu » (dans la main ou un objet tenu), « contact » (cible touchée), « corps » (autour de soi),
+  //        « proche » (près de soi), « loin » (à distance, coût selon la distance).
+  // tol : ce que le corps supporte sans protection · coef : multiplicateur d'énergie des blocs suivants
+  // mental : concentration supplémentaire (s) · porteeMult : la distance pèse « porteeMult » fois moins
+  const ANCRAGES = {
+    main:     { nom: 'Dans la main', zone: 'tenu', tol: { haut: 50, bas: -10 }, qui: 'ta main', ou: 'dans ta main' },
+    mains:    { nom: 'Entre les deux mains', zone: 'tenu', tol: { haut: 50, bas: -10 }, qui: 'tes mains', ou: 'entre tes mains', coef: 0.9, mental: 0.1,
+                note: 'Les deux mains encadrent le sort : contrôle plus fin (énergie ×0,9), mais elles sont toutes les deux occupées.' },
+    doigt:    { nom: 'Au bout du doigt', zone: 'tenu', tol: { haut: 40, bas: -5 }, qui: 'ton doigt', ou: 'au bout de ton doigt',
+                note: 'Très précis, idéal pour un trait fin ou une petite quantité ; la peau du doigt supporte moins la chaleur que la paume.' },
+    objet:    { nom: 'Dans un objet tenu (arme, bâton…)', zone: 'tenu', tol: { haut: 150, bas: -40 }, qui: 'ta main (à travers l\'objet)', ou: 'dans l\'objet que tu tiens', mental: 0.1,
+                note: 'L\'objet fait tampon : la main supporte jusqu\'à 150 °C, mais l\'objet lui-même peut s\'abîmer.' },
+    contact:  { nom: 'Sur une cible touchée', zone: 'contact', tol: { haut: 50, bas: -10 }, qui: 'ta main', ou: 'sur ta cible, sous ta main', mental: 0.2,
+                note: 'Le sort naît dans ce que tu touches : aucune perte de distance, mais il faut atteindre la cible, et ta main reste au contact.' },
+    corps:    { nom: 'Autour de soi (aura)', zone: 'corps', tol: { haut: 45, bas: -5 }, qui: 'ton corps', ou: 'tout autour de toi', coef: 1.2, mental: 0.2,
+                note: 'Le sort enveloppe tout le corps (énergie ×1,2) : parfait pour une protection ou une lévitation, dangereux pour tout le reste.' },
+    pieds:    { nom: 'Au sol, à ses pieds', zone: 'proche', tol: { haut: 150, bas: -40 }, qui: 'tes jambes', ou: 'à tes pieds',
+                note: 'Le sol sert d\'appui et de réserve de matière ; le sort reste assez proche pour que les jambes en souffrent.' },
+    devant:   { nom: 'Devant soi (1 m)', zone: 'proche', tol: { haut: 250, bas: -60 }, qui: 'ton corps', ou: 'à un mètre de toi' },
+    dessus:   { nom: 'Au-dessus de soi (3 m)', zone: 'proche', tol: { haut: 600, bas: -150 }, qui: 'ton corps', ou: 'au-dessus de ta tête', distanceFixe: 3,
+                note: 'Hors de portée de main, mais tout ce qui tombe ou rayonne vers le bas te concerne.' },
+    distance: { nom: 'À distance (point visible)', zone: 'loin', variable: true, ou: 'à distance' },
+    creature: { nom: 'Sur une créature visée', zone: 'loin', variable: true, coef: 1.15, mental: 0.3, ou: 'sur ta cible',
+                note: 'Le sort suit la créature : il faut la garder en vue jusqu\'au lancement (énergie ×1,15). Elle peut tenter de résister.' },
+    rune:     { nom: 'Sur une rune préparée', zone: 'loin', variable: true, porteeMult: 3, mental: 0.5, ou: 'sur la rune',
+                note: 'Une rune tracée à l\'avance sert de relais : la distance pèse trois fois moins. Le tracé se fait avant, hors incantation.' },
+    lien:     { nom: 'Sur un objet lié (focus personnel)', zone: 'loin', variable: true, porteeMult: 6, mental: 0.3, coef: 1.1, ou: 'sur l\'objet lié',
+                note: 'Un objet longuement lié au lanceur : la distance pèse six fois moins, mais l\'entretien du lien coûte un peu (énergie ×1,1).' },
+  };
+  const ancrageDe = (cle) => ANCRAGES[cle] || ANCRAGES.main;
+  const estProche = (cle) => ancrageDe(cle).zone !== 'loin';
+  // Tolérance du corps sans protection, par ancrage (utilisée aussi par la courbe de la forge)
+  const TOLERANCE = Object.fromEntries(Object.entries(ANCRAGES).filter(([, a]) => a.tol).map(([k, a]) => [k, a.tol]));
 
   // --- Familles de blocs (ordre de la palette) ------------------------------
   const FAMILLES = {
@@ -101,16 +133,19 @@ const Blueprint = (() => {
       description: 'Point d\'origine du sort. Tout blueprint commence ici. Plus l\'ancrage est loin, plus chaque bloc coûte cher.',
       formule: 'à distance : énergie × (1 + d / portée_ref)²',
       params: [
-        { id: 'lieu', label: 'Lieu', type: 'select', def: 'main', options: { main: 'Dans la main', devant: 'Devant soi (1 m)', distance: 'À distance' } },
-        { id: 'distance', label: 'Distance', unite: 'm', def: 10, min: 0, si: (p) => p.lieu === 'distance' },
+        { id: 'lieu', label: 'Lieu', type: 'select', def: 'main', options: opts(ANCRAGES) },
+        { id: 'distance', label: 'Distance', unite: 'm', def: 10, min: 0, si: (p) => !!ancrageDe(p.lieu).variable },
       ],
       appliquer(e, p, ctx) {
         if (e.ancre) { ctx.alerte('attention', 'Ancrage répété : seul le premier compte.'); return; }
-        e.ancre = p.lieu;
-        e.facteurDistance = p.lieu === 'distance' ? (1 + p.distance / ctx.R.porteeRef) ** 2 : 1;
-        if (p.lieu === 'distance') ctx.alerte('info', `Ancrage à ${p.distance} m : tous les blocs suivants coûtent ×${M.formatNombre(e.facteurDistance, 2)} jusqu'au lancement.`);
+        const a = ancrageDe(p.lieu);
+        e.ancre = ANCRAGES[p.lieu] ? p.lieu : 'main';
+        const dist = a.variable ? (1 + p.distance / (ctx.R.porteeRef * (a.porteeMult || 1))) ** 2 : 1;
+        e.facteurDistance = dist * (a.coef || 1);
+        if (a.note) ctx.alerte('info', a.note);
+        if (a.variable || a.coef) ctx.alerte('info', `Ancrage ${a.variable ? `à ${p.distance} m ` : ''}: tous les blocs suivants coûtent ×${M.formatNombre(e.facteurDistance, 2)} jusqu'au lancement.`);
         ctx.energie(10);
-        ctx.mental(0.1);
+        ctx.mental(0.1 + (a.mental || 0));
       },
     },
     attendre: {
@@ -142,7 +177,7 @@ const Blueprint = (() => {
         e.tempsCharge ??= e.t; // l'attente du piège ne compte pas dans le temps d'incantation
         const W = ctx.puissanceEntretien();
         if (W > 0) ctx.alerte('info', `Pendant l'attente, le sort consomme ${M.formatEnergie(W * 60)} par minute en entretiens.`);
-        if (!e.lance && e.ancre === 'main' && p.attente > 10) ctx.alerte('attention', 'Un piège tenu dans la main immobilise le lanceur : ancre-le devant toi ou à distance.');
+        if (!e.lance && ['tenu', 'contact'].includes(ancrageDe(e.ancre).zone) && p.attente > 10) ctx.alerte('attention', `Un piège ancré ${ancrageDe(e.ancre).ou} immobilise le lanceur : ancre-le devant toi, au sol ou à distance.`);
         ctx.evoluer(p.attente);
       },
     },
@@ -159,8 +194,9 @@ const Blueprint = (() => {
         e.livraison = { thermique: th, cinetique: ci, electrique: el, total: th + ci + el, mode: p.mode, forme: e.forme, fragments: e.fragments };
         e.libere = true;
         e.tempsCharge ??= e.t;
-        if (!e.lance && e.ancre !== 'distance' && p.mode !== 'dissipation' && th + ci + el > 1000)
-          ctx.alerte('danger', `La libération a lieu ${e.ancre === 'main' ? 'dans ta main' : 'à un mètre de toi'} : tu encaisses ${M.formatEnergie(th + ci + el)}.`);
+        const contactCible = ancrageDe(e.ancre).zone === 'contact' && p.mode === 'contact';
+        if (!e.lance && estProche(e.ancre) && !contactCible && p.mode !== 'dissipation' && th + ci + el > 1000)
+          ctx.alerte('danger', `La libération a lieu ${ancrageDe(e.ancre).ou} : tu encaisses ${M.formatEnergie(th + ci + el)}.`);
         if (e.fragments > 1 && e.livraison.total > 0) ctx.alerte('info', `${e.fragments} impacts d'environ ${M.formatEnergie(e.livraison.total / e.fragments)} chacun.`);
         if (e.piege) ctx.alerte('info', `Se déclenche ${({ duree: 'après le délai', contact: 'au contact', proximite: 'à l\'approche d\'un être vivant', mot: 'sur le mot de commande' })[e.piege]}.`);
         e.entretiens = {};
@@ -370,7 +406,7 @@ const Blueprint = (() => {
       appliquer(e, p, ctx) {
         const J = p.energie * 1000;
         ctx.energie(J / 0.5);
-        if (!e.lance && e.ancre !== 'distance' && e.bouclier < J)
+        if (!e.lance && estProche(e.ancre) && e.bouclier < J)
           ctx.alerte('danger', `Tu es au centre de l'onde : ${M.formatEnergie(J)} te frappent${e.bouclier ? ` (ton bouclier n'en arrête que ${M.formatEnergie(e.bouclier)})` : '. Ajoute un « Bouclier cinétique » avant'}.`);
         else ctx.alerte('info', `Repousse tout ce qui entoure le sort avec ${M.formatEnergie(J)}.`);
         ctx.mental(0.1);
@@ -433,7 +469,7 @@ const Blueprint = (() => {
       formule: 'entretien = m · g · 1 m/s',
       params: [],
       appliquer(e, p, ctx) {
-        if (e.ancre === 'main') ctx.alerte('info', 'Dans la main, la lévitation ne sert pas à grand-chose.');
+        if (ancrageDe(e.ancre).zone === 'tenu') ctx.alerte('info', `Ancré ${ancrageDe(e.ancre).ou}, le sort est déjà tenu : la lévitation ne sert pas à grand-chose.`);
         e.levite = true;
         majConfinement(e);
         ctx.energie(20);
@@ -449,7 +485,7 @@ const Blueprint = (() => {
       params: [{ id: 'seuil', label: 'Supporte jusqu\'à', type: 'select', def: '1000', options: { '200': '± 200 °C', '500': '± 500 °C', '1000': '± 1 000 °C', '2000': '± 2 000 °C', '3500': '± 3 500 °C' } }],
       appliquer(e, p, ctx) {
         const s = Number(p.seuil);
-        if (e.ancre === 'distance') ctx.alerte('info', 'Le sort est ancré loin de toi : cette protection ne sert pas à grand-chose.');
+        if (!estProche(e.ancre)) ctx.alerte('info', 'Le sort est ancré loin de toi : cette protection ne sert pas à grand-chose.');
         e.protection = Math.max(e.protection, s);
         e.entretiens.protection = 0.002 * e.protection ** 2;
         ctx.energie(2 * s, { sansDistance: true });
@@ -604,7 +640,7 @@ const Blueprint = (() => {
         lancer(distance) {
           e.lance = true; e.distanceVol = distance; e.tempsCharge ??= e.t;
           const relaches = ENTRETIENS_LANCEUR.filter((k) => e.entretiens[k]);
-          if (relaches.some((k) => k !== 'levitation')) ctx.alerte('info', `Le sort quitte ${e.ancre === 'main' ? 'ta main' : 'le lanceur'} : les protections se relâchent.`);
+          if (relaches.some((k) => k !== 'levitation')) ctx.alerte('info', `Le sort quitte ${ancrageDe(e.ancre).zone === 'tenu' ? ancrageDe(e.ancre).qui : 'le lanceur'} : les protections se relâchent.`);
           for (const k of relaches) delete e.entretiens[k];
         },
         mental(dt) { ctx.evoluer(dt * (R.dureeMentale ?? 1)); },
@@ -646,10 +682,10 @@ const Blueprint = (() => {
       };
 
       function verifierCorps(T) {
-        if (e.lance || e.libere || !e.ancre || e.ancre === 'distance') return;
-        const qui = e.ancre === 'main' ? 'ta main' : 'ton corps';
+        if (e.lance || e.libere || !e.ancre || !estProche(e.ancre)) return;
+        const qui = ancrageDe(e.ancre).qui;
         if (e.matiere) {
-          const tol = TOLERANCE[e.ancre];
+          const tol = ancrageDe(e.ancre).tol;
           const haut = Math.max(tol.haut, e.protection), bas = Math.min(tol.bas, -e.protection);
           if (T > haut && !signale.has('chaud')) {
             signale.add('chaud');
@@ -729,7 +765,7 @@ const Blueprint = (() => {
     return base;
   }
 
-  return { AMBIANTE, TOLERANCE, FAMILLES, FORMES, TRANSITIONS, COMBUSTIBLES, BLOCS, parametres, valeurs, nouveauBloc, simuler, cout, normaliser };
+  return { AMBIANTE, TOLERANCE, ANCRAGES, FAMILLES, FORMES, TRANSITIONS, COMBUSTIBLES, BLOCS, parametres, valeurs, nouveauBloc, simuler, cout, normaliser };
 })();
 
 /* --- Blueprints d'exemple -------------------------------------------------- */
