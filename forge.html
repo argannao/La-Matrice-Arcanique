@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>La Forge</title>
+  <meta name="description" content="Constructeur de sorts de La Matrice Arcanique : le coût se calcule en direct à partir de la physique.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/style.css">
+  <style>
+    .forge { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 1.5rem; align-items: start; margin-top: 1.5rem; }
+    .bloc-titre { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 0.9rem; }
+    .bloc-titre h2 { margin: 0; font-size: 1.45rem; }
+    .bloc-titre small { color: var(--texte-faible); }
+
+    .ajout { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 0.45rem; }
+    .ajout button {
+      background: var(--bg-2); border: 1px dashed var(--ligne-forte); color: var(--texte-doux);
+      border-radius: 7px; padding: 0.5rem 0.6rem; font: inherit; font-size: 0.86rem; cursor: pointer; text-align: left;
+    }
+    .ajout button:hover { border-color: var(--arcane); border-style: solid; color: var(--arcane); }
+
+    .compo { background: var(--bg-2); border: 1px solid var(--ligne); border-radius: 9px; padding: 1rem; margin-bottom: 0.8rem; }
+    .compo-tete { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; margin-bottom: 0.4rem; }
+    .compo-tete h3 { margin: 0; font-size: 1.2rem; }
+    .compo-desc { color: var(--texte-doux); font-size: 0.88rem; margin: 0 0 0.3rem; }
+    .compo .formule { font-size: 0.82rem; margin: 0.4rem 0 0.9rem; }
+    .compo-energie { font-family: var(--mono); color: var(--arcane); font-size: 0.9rem; white-space: nowrap; }
+
+    .resultat { position: sticky; top: 4.5rem; }
+    .ether { display: flex; align-items: baseline; gap: 0.5rem; }
+    .ether .valeur { font-family: var(--serif); font-size: 4rem; font-weight: 700; line-height: 1; color: var(--texte); }
+    .ether .unite { color: var(--texte-doux); font-size: 1rem; }
+    .cercle { font-family: var(--mono); font-size: 0.8rem; color: var(--laiton); letter-spacing: 0.06em; text-transform: uppercase; margin: 0.4rem 0 1rem; }
+    .jauge { height: 10px; background: var(--bg-2); border: 1px solid var(--ligne); border-radius: 99px; overflow: hidden; }
+    .jauge > div { height: 100%; width: 0; transition: width .3s ease, background-color .3s; }
+    .jauge-leg { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 0.75rem; color: var(--texte-faible); margin: 0.3rem 0 0.8rem; }
+    .risque { font-size: 0.9rem; padding: 0.6rem 0.75rem; border-radius: 7px; border-left: 3px solid; background: var(--bg-2); }
+    .risque.sur { border-color: var(--sur); } .risque.modere { border-color: var(--modere); }
+    .risque.eleve { border-color: var(--eleve); } .risque.critique { border-color: var(--critique); color: #f2b5b6; }
+    .risque.nul { border-color: var(--ligne-forte); color: var(--texte-faible); }
+    .decompte { width: 100%; margin: 1rem 0; font-size: 0.85rem; }
+    .decompte td { padding: 0.32rem 0; border: none; }
+    .decompte td:last-child { text-align: right; font-family: var(--mono); color: var(--texte-doux); }
+    .decompte tr.total td { border-top: 1px solid var(--ligne); padding-top: 0.5rem; color: var(--texte); font-weight: 600; }
+    .decompte tr.total td:last-child { color: var(--arcane); }
+    .comparaison { font-size: 0.85rem; color: var(--texte-doux); font-style: italic; margin-bottom: 1rem; }
+
+    details.reglages summary { cursor: pointer; font-family: var(--serif); font-size: 1.3rem; font-weight: 600; }
+    details.reglages[open] summary { margin-bottom: 0.9rem; }
+    .aide { font-size: 0.8rem; color: var(--texte-faible); margin-top: -0.5rem; margin-bottom: 0.85rem; }
+
+    @media (max-width: 920px) {
+      .forge { grid-template-columns: 1fr; }
+      .resultat { position: static; order: -1; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="surtitre">Module</div>
+    <h1>La Forge</h1>
+    <p class="chapeau">Assemble les composantes de ton sort. Les formules physiques donnent l'énergie de chaque effet ; la Matrice en déduit le coût pour le lanceur.</p>
+
+    <div class="forge">
+      <div>
+        <section class="carte">
+          <div class="bloc-titre"><h2>Identité</h2></div>
+          <div class="champs">
+            <div class="champ"><label for="nom">Nom du sort</label><input id="nom" placeholder="Boule de feu"></div>
+            <div class="champ"><label for="ecole">École</label><input id="ecole" list="ecoles" placeholder="Pyromancie"></div>
+          </div>
+          <datalist id="ecoles"></datalist>
+          <div class="champ"><label for="description">Description narrative</label><textarea id="description" placeholder="Ce que voient les témoins quand le sort est lancé…"></textarea></div>
+        </section>
+
+        <section class="carte">
+          <div class="bloc-titre"><h2>Composantes</h2><small id="nb-compo"></small></div>
+          <div id="composantes"></div>
+          <label>Ajouter une composante</label>
+          <div class="ajout" id="ajout"></div>
+        </section>
+
+        <section class="carte">
+          <div class="bloc-titre"><h2>Tissage</h2></div>
+          <div class="champs">
+            <div class="champ"><label for="portee">Portée</label><div class="avec-unite"><input id="portee" type="number" min="0" step="1"><span class="unite">m</span></div></div>
+            <div class="champ"><label for="cibles">Nombre de cibles</label><input id="cibles" type="number" min="1" step="1"></div>
+            <div class="champ"><label for="precision">Précision</label><select id="precision"></select></div>
+            <div class="champ"><label for="incantation">Incantation</label><select id="incantation"></select></div>
+            <div class="champ"><label for="focalisateur">Focalisateur</label><select id="focalisateur"></select></div>
+          </div>
+        </section>
+
+        <section class="carte">
+          <div class="bloc-titre"><h2>Lanceur</h2></div>
+          <div class="champs">
+            <div class="champ"><label for="niveau">Maîtrise</label><select id="niveau"></select></div>
+            <div class="champ"><label for="reserve">Réserve d'Éther</label><input id="reserve" type="number" min="1" step="1"></div>
+          </div>
+          <p class="aide" id="aide-niveau"></p>
+        </section>
+
+        <section class="carte">
+          <details class="reglages">
+            <summary>Réglages de table</summary>
+            <p class="aide" style="margin-top:0">Ces règles d'inspiration s'appliquent à tous tes sorts. Ajuste-les pour rendre la magie plus rare ou plus accessible.</p>
+            <div class="champs">
+              <div class="champ"><label for="r-base">Progression du coût</label><input id="r-base" type="number" min="1.05" max="4" step="0.05"></div>
+              <div class="champ"><label for="r-portee">Portée de référence</label><div class="avec-unite"><input id="r-portee" type="number" min="1" step="1"><span class="unite">m</span></div></div>
+              <div class="champ"><label for="r-complexite">Surcoût par composante</label><input id="r-complexite" type="number" min="0" max="2" step="0.05"></div>
+            </div>
+            <p class="aide">Le coût en Éther est multiplié par la progression à chaque fois que l'énergie est ×10. À la portée de référence, l'énergie est ×4.</p>
+            <div id="r-niveaux" class="champs"></div>
+            <button class="bouton petit" id="r-reset" type="button">Rétablir les valeurs par défaut</button>
+          </details>
+        </section>
+      </div>
+
+      <aside class="carte resultat" aria-live="polite">
+        <div class="surtitre" style="margin:0 0 .3rem">Coût du sort</div>
+        <div class="ether"><span class="valeur" id="res-ether">0</span><span class="unite">Éther</span></div>
+        <div class="cercle" id="res-cercle">—</div>
+        <div class="jauge"><div id="res-jauge"></div></div>
+        <div class="jauge-leg"><span>0</span><span id="res-reserve">réserve</span></div>
+        <div class="risque nul" id="res-risque">Ajoute une composante pour commencer.</div>
+        <table class="decompte"><tbody id="res-decompte"></tbody></table>
+        <div class="comparaison" id="res-comparaison"></div>
+        <div class="actions">
+          <button class="bouton principal" id="b-enregistrer" type="button">Enregistrer au grimoire</button>
+          <button class="bouton" id="b-copier" type="button">Copier la fiche</button>
+          <button class="bouton" id="b-exporter" type="button">Exporter</button>
+          <button class="bouton danger" id="b-nouveau" type="button">Nouveau sort</button>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <script src="assets/matrice.js"></script>
+  <script src="assets/commun.js"></script>
+  <script src="assets/forge.js"></script>
+</body>
+</html>

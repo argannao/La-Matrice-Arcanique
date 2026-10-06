@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Le Grimoire</title>
+  <meta name="description" content="Les sorts sauvegardés de La Matrice Arcanique, et des sorts d'exemple.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/style.css">
+  <style>
+    .outils { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; justify-content: space-between; margin: 1.5rem 0 1rem; }
+    .outils input[type=search] { max-width: 320px; }
+    .sort { display: flex; flex-direction: column; gap: 0.5rem; }
+    .sort-tete { display: flex; justify-content: space-between; gap: 0.75rem; align-items: flex-start; }
+    .sort-tete h3 { margin: 0; }
+    .sort .ecole { color: var(--laiton); font-size: 0.85rem; }
+    .sort .cout { text-align: right; flex-shrink: 0; }
+    .sort .cout b { font-family: var(--serif); font-size: 2rem; line-height: 1; display: block; }
+    .sort .cout small { font-family: var(--mono); font-size: 0.7rem; color: var(--texte-faible); }
+    .sort p { margin: 0; color: var(--texte-doux); font-size: 0.92rem; }
+    .sort .meta { font-family: var(--mono); font-size: 0.75rem; color: var(--texte-faible); }
+    .sort .compos { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+    .sort .actions { margin-top: auto; padding-top: 0.4rem; }
+    .point { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 0.35rem; vertical-align: middle; }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="surtitre">Module</div>
+    <h1>Le Grimoire</h1>
+    <p class="chapeau">Tes sorts sont conservés dans ce navigateur. Exporte-les pour les partager avec ta table ou les retrouver sur un autre appareil.</p>
+
+    <div class="outils">
+      <input type="search" id="recherche" placeholder="Rechercher un sort, une école…" aria-label="Rechercher">
+      <div class="actions">
+        <a class="bouton principal" href="forge.html">+ Nouveau sort</a>
+        <button class="bouton" id="b-export" type="button">Exporter le grimoire</button>
+        <label class="bouton" style="margin:0;color:var(--texte)">Importer<input type="file" id="b-import" accept=".json,application/json" hidden></label>
+      </div>
+    </div>
+
+    <h2>Mes sorts</h2>
+    <div id="mes-sorts" class="grille-cartes"></div>
+
+    <h2>Sorts d'exemple</h2>
+    <p class="chapeau" style="margin-top:-.4rem">Ouvre-les dans la Forge pour voir comment le coût se construit, puis adapte-les.</p>
+    <div id="exemples" class="grille-cartes"></div>
+  </main>
+
+  <script src="assets/matrice.js"></script>
+  <script src="assets/commun.js"></script>
+  <script>
+  (() => {
+    const M = Matrice;
+    const R = M.reglages();
+    const COUL = { sur: 'var(--sur)', modere: 'var(--modere)', eleve: 'var(--eleve)', critique: 'var(--critique)', nul: 'var(--ligne-forte)' };
+
+    function carte(s, exemple) {
+      const r = M.evaluer(s, R);
+      const niv = R.niveaux[s.lanceur?.niveau]?.nom || '';
+      const lien = exemple ? `forge.html?exemple=${encodeURIComponent(s.id)}` : `forge.html?id=${encodeURIComponent(s.id)}`;
+      return `<article class="carte sort">
+        <div class="sort-tete">
+          <div><h3>${echapper(s.nom || 'Sans nom')}</h3><div class="ecole">${echapper(s.ecole || '—')}</div></div>
+          <div class="cout"><b>${r.ether}</b><small>ÉTHER</small></div>
+        </div>
+        <div class="meta"><span class="point" style="background:${COUL[r.risque.niv]}"></span>${echapper(r.cercle)} · ${echapper(niv)}</div>
+        ${s.description ? `<p>${echapper(s.description)}</p>` : ''}
+        <div class="compos">${(s.composantes || []).map((c) => `<span class="pastille">${echapper(M.EFFETS[c.type]?.nom || c.type)}</span>`).join('')}</div>
+        <div class="meta">${M.formatEnergie(r.ePuisee)} puisés · portée ${s.modificateurs?.portee ? s.modificateurs.portee + ' m' : 'contact'}</div>
+        <div class="actions">
+          <a class="bouton petit" href="${lien}">${exemple ? 'Ouvrir dans la Forge' : 'Modifier'}</a>
+          ${exemple ? '' : `<button class="bouton petit danger" type="button" data-suppr="${echapper(s.id)}">Supprimer</button>`}
+        </div>
+      </article>`;
+    }
+
+    function rendre() {
+      const q = document.getElementById('recherche').value.trim().toLowerCase();
+      const filtre = (s) => !q || [s.nom, s.ecole, s.description].some((t) => (t || '').toLowerCase().includes(q));
+      const mes = M.grimoire().filter(filtre).sort((a, b) => (a.nom || '').localeCompare(b.nom || '', 'fr'));
+      document.getElementById('mes-sorts').innerHTML = mes.length ? mes.map((s) => carte(s, false)).join('')
+        : `<div class="vide" style="grid-column:1/-1">${q ? 'Aucun sort ne correspond.' : 'Ton grimoire est vide. Forge ton premier sort ou pars d\'un exemple.'}</div>`;
+      const ex = EXEMPLES.filter(filtre);
+      document.getElementById('exemples').innerHTML = ex.length ? ex.map((s) => carte(s, true)).join('') : '<div class="vide" style="grid-column:1/-1">Aucun exemple ne correspond.</div>';
+    }
+
+    document.getElementById('recherche').addEventListener('input', rendre);
+    document.getElementById('mes-sorts').addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-suppr]');
+      if (!b) return;
+      const s = M.grimoire().find((x) => x.id === b.dataset.suppr);
+      if (s && confirm(`Supprimer « ${s.nom} » du grimoire ?`)) { M.supprimer(s.id); rendre(); notifier('Sort supprimé.'); }
+    });
+    document.getElementById('b-export').addEventListener('click', () => {
+      const g = M.grimoire();
+      if (!g.length) return notifier('Le grimoire est vide.');
+      telecharger('grimoire-matrice-arcanique.json', JSON.stringify({ format: 'matrice-arcanique', version: 1, sorts: g }, null, 2));
+    });
+    document.getElementById('b-import').addEventListener('change', async (ev) => {
+      const f = ev.target.files[0];
+      if (!f) return;
+      try {
+        const data = JSON.parse(await f.text());
+        const liste = Array.isArray(data) ? data : Array.isArray(data.sorts) ? data.sorts : [data];
+        const valides = liste.filter((s) => s && Array.isArray(s.composantes));
+        if (!valides.length) throw new Error();
+        valides.forEach((s) => M.enregistrer({ ...M.nouveauSort(), ...s, id: s.id || M.nouveauSort().id }));
+        rendre();
+        notifier(`${valides.length} sort${valides.length > 1 ? 's importés' : ' importé'}.`);
+      } catch { notifier('Fichier invalide : ce n\'est pas un export de la Matrice.'); }
+      ev.target.value = '';
+    });
+    rendre();
+  })();
+  </script>
+</body>
+</html>
