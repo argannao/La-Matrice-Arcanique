@@ -145,6 +145,7 @@
   function rendreReglages() {
     $('r-base').value = R.base;
     $('r-portee').value = R.porteeRef;
+    $('r-mental').value = R.dureeMentale ?? 1;
     $('r-niveaux').innerHTML = Object.entries(R.niveaux).map(([k, n]) => `
       <div class="champ"><label for="rr-${k}">${echapper(n.nom)} — rendement</label><div class="avec-unite"><input id="rr-${k}" type="number" min="1" max="100" step="1" value="${Math.round(n.rendement * 100)}" data-niv="${k}" data-champ="rendement"><span class="unite">%</span></div></div>
       <div class="champ"><label for="rv-${k}">${echapper(n.nom)} — réserve</label><input id="rv-${k}" type="number" min="1" step="1" value="${n.reserve}" data-niv="${k}" data-champ="reserve"></div>`).join('');
@@ -152,6 +153,7 @@
   const sauverReglages = () => { M.store.set('matrice.reglages', R); rendreNiveaux(); maj(); };
   $('r-base').addEventListener('input', () => { const v = Number($('r-base').value); if (v > 1) { R.base = v; sauverReglages(); } });
   $('r-portee').addEventListener('input', () => { const v = Number($('r-portee').value); if (v > 0) { R.porteeRef = v; sauverReglages(); } });
+  $('r-mental').addEventListener('input', () => { const v = Number($('r-mental').value); if (v >= 0 && $('r-mental').value !== '') { R.dureeMentale = v; sauverReglages(); } });
   $('r-niveaux').addEventListener('input', (ev) => {
     const el = ev.target, v = Number(el.value);
     if (!el.dataset.niv || !(v > 0)) return;

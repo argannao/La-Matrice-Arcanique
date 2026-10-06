@@ -15,7 +15,8 @@ const Blueprint = (() => {
   const TOLERANCE = { main: { haut: 50, bas: -10 }, devant: { haut: 250, bas: -60 } };
 
   // --- Blocs ---------------------------------------------------------------
-  // appliquer(etat, params, ctx) : modifie l'état ; ctx.energie(), ctx.evoluer(), ctx.alerte()
+  // appliquer(etat, params, ctx) : modifie l'état ; ctx.energie(), ctx.evoluer(), ctx.mental(), ctx.alerte()
+  // ctx.mental() = opération de pure concentration : brève, ajustable par le réglage « durée des opérations mentales »
   const BLOCS = {
     ancrage: {
       nom: 'Ancrage', ecole: 'Fondation', nature: 'inspire', couleur: '#8a93b8',
@@ -30,13 +31,13 @@ const Blueprint = (() => {
         e.facteurDistance = p.lieu === 'distance' ? (1 + p.distance / ctx.R.porteeRef) ** 2 : 1;
         if (p.lieu === 'distance') ctx.alerte('info', `Ancrage à ${p.distance} m : tous les blocs suivants coûtent ×${M.formatNombre(e.facteurDistance, 2)} jusqu'au lancement.`);
         ctx.energie(10);
-        ctx.evoluer(0.5);
+        ctx.mental(0.1);
       },
     },
     rassembler: {
       nom: 'Rassembler la matière', ecole: 'Fondation', nature: 'inspire', couleur: '#8a93b8',
       description: 'Attirer et condenser de la matière ambiante au point d\'ancrage (air, eau d\'une source, pierre du sol…). Loi inventée : 300 J par kilogramme.',
-      formule: 'E = m · 300 J/kg   ·   durée = 1 s + 0,5 s/kg',
+      formule: 'E = m · 300 J/kg   ·   durée = 0,2 s + 0,05 s/kg',
       params: [
         { id: 'matiere', label: 'Matière', type: 'select', def: 'air', options: Object.fromEntries(MATIERES_AMBIANTES.map((k) => [k, M.MATERIAUX[k].nom])) },
         { id: 'masse', label: 'Masse', unite: 'kg', def: 1, min: 0.001, step: 0.1 },
@@ -47,7 +48,7 @@ const Blueprint = (() => {
         else { e.matiere = { type: p.matiere, masse: p.masse }; e.T = AMBIANTE; }
         if (e.confine) e.entretiens.confinement = 500 * Math.max(0.1, e.matiere.masse);
         ctx.energie(p.masse * 300);
-        ctx.evoluer(1 + 0.5 * p.masse);
+        ctx.mental(0.2 + 0.05 * p.masse);
       },
     },
     creer: {
@@ -63,7 +64,7 @@ const Blueprint = (() => {
         if (e.matiere && e.matiere.type === p.matiere) e.matiere.masse += kg;
         else { e.matiere = { type: p.matiere, masse: kg }; e.T = AMBIANTE; }
         ctx.energie(kg * M.C * M.C);
-        ctx.evoluer(1);
+        ctx.mental(0.3);
       },
     },
     protection: {
@@ -80,7 +81,7 @@ const Blueprint = (() => {
         e.protection = Math.max(e.protection, s);
         e.entretiens.protection = 0.002 * e.protection ** 2;
         ctx.energie(2 * s, { sansDistance: true });
-        ctx.evoluer(1);
+        ctx.mental(0.2);
       },
     },
     confinement: {
@@ -93,7 +94,7 @@ const Blueprint = (() => {
         e.confine = true;
         e.entretiens.confinement = 500 * Math.max(0.1, e.matiere?.masse || 0.1);
         ctx.energie(100);
-        ctx.evoluer(1);
+        ctx.mental(0.2);
       },
     },
     chaleur: {
@@ -190,7 +191,7 @@ const Blueprint = (() => {
       params: [{ id: 'effet', label: 'Effet', type: 'select', def: 'lumiere', options: opts(M.EFFETS) }],
       appliquer(e, p, ctx) {
         ctx.energie(M.energieComposante({ type: p.effet, params: p }));
-        ctx.evoluer(1);
+        ctx.mental(0.2);
       },
     },
   };
@@ -248,6 +249,8 @@ const Blueprint = (() => {
           const vol = e.lance && !e.libere ? 1 + e.v / 5 : 1; // convection forcée en vol
           return k * m ** (2 / 3) * vol;
         },
+        // Opération mentale : durée de base × réglage de table
+        mental(dt) { ctx.evoluer(dt * (R.dureeMentale ?? 1)); },
         // Fait passer dt secondes avec une puissance nette P (W) injectée dans la matière
         evoluer(dt, P = 0) {
           if (!(dt > 0)) return;

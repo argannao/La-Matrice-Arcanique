@@ -179,6 +179,7 @@ const Matrice = (() => {
     base: 1.6,          // multiplicateur du coût en Éther par ordre de grandeur d'énergie
     porteeRef: 10,      // distance (m) à laquelle le coût est multiplié par 4
     complexite: 0.25,   // surcoût par composante au-delà de la première
+    dureeMentale: 1,    // multiplicateur des durées des opérations mentales (ancrage, protection…)
     niveaux: {
       novice:    { nom: 'Novice',    rendement: 0.05, reserve: 20 },
       adepte:    { nom: 'Adepte',    rendement: 0.15, reserve: 40 },
