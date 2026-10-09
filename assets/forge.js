@@ -232,6 +232,15 @@
       if (s.cache && !s.libere) puces.push('<span class="puce ok">invisible</span>');
       if (s.lumiere && !s.libere) puces.push(`<span class="puce">lumineux</span>`);
       if (s.piege && !s.libere) puces.push('<span class="puce">en attente</span>');
+      if (s.aimant && !s.libere) puces.push(`<span class="puce">🧲 ${M.formatNombre(s.aimant, 2)} T</span>`);
+      if (s.silence && !s.libere) puces.push('<span class="puce ok">silencieux</span>');
+      if (s.percoit && !s.lance) puces.push(`<span class="puce ok">perçoit la magie (${s.percoit} m)</span>`);
+      if (s.rempart && !s.lance) puces.push('<span class="puce ok">esprit fermé</span>');
+      if (s.diag) puces.push('<span class="puce ok">diagnostiqué</span>');
+      if (s.anesthesie && !s.libere) puces.push('<span class="puce ok">anesthésié</span>');
+      if (s.soin) puces.push(`<span class="puce ok">💚 ${M.formatNombre(s.soin, s.soin < 1 ? 1 : 0)} g soignés</span>`);
+      if (s.purge) puces.push('<span class="puce ok">poison purgé</span>');
+      if (s.psyche) puces.push('<span class="puce">esprit touché</span>');
       if (s.confine && !s.libere) puces.push('<span class="puce ok">confiné</span>');
       if (s.lance && !s.libere) puces.push(`<span class="puce">en vol · ${s.v} m/s</span>`);
       if (s.libere) puces.push('<span class="puce">libéré</span>');
@@ -255,7 +264,7 @@
     $('res-charge').textContent = n ? fmtS(r.tempsCharge) : '—';
     $('res-puisee').textContent = M.formatEnergie(r.ePuisee);
     $('res-entretien').textContent = M.formatEnergie(r.eEntretien * r.focal / r.rendement);
-    $('res-livree').textContent = r.livraison ? M.formatEnergie(r.livraison.total) : '—';
+    $('res-livree').textContent = r.livraison ? M.formatEnergie(r.livraison.total) : r.etatFinal.soin ? `${M.formatNombre(r.etatFinal.soin, r.etatFinal.soin < 1 ? 1 : 0)} g soignés` : '—';
     $('res-comparaison').textContent = r.livraison && r.livraison.total > 0
       ? `À l'impact : ${comparer(r.livraison.total)}.`
       : r.ePuisee > 0 ? `Le lanceur puise ${comparer(r.ePuisee)}.` : '';
@@ -280,7 +289,7 @@
   // --- Courbes du sort : température, électricité, énergie ------------------------------
   let onglet = null;          // onglet choisi par l'utilisateur (null = automatique)
   let dernierGraph = null;    // données du dernier graphique pour le survol
-  const DENSITES = { air: 1.2, vapeur: 0.6, eau: 1000, glace: 917, pierre: 2600, fer: 7870, bois: 600, or: 19300, chair: 1000, huile: 900, charbon: 1400 };
+  const DENSITES = B.DENSITES;
   const EPS0 = 8.854e-12;
 
   document.querySelector('.onglets').addEventListener('click', (ev) => {
@@ -541,7 +550,13 @@
   });
 
   // --- Exemples accessibles depuis la Forge ---------------------------------------------
-  $('exemples-forge').innerHTML = EXEMPLES.map((ex) => `<button class="bouton petit" type="button" data-ex="${echapper(ex.id)}">${echapper(ex.nom)}</button>`).join('');
+  {
+    const groupes = new Map();
+    for (const ex of EXEMPLES) { const k = ex.ecole || 'Divers'; if (!groupes.has(k)) groupes.set(k, []); groupes.get(k).push(ex); }
+    $('nb-exemples').textContent = `(${EXEMPLES.length})`;
+    $('exemples-forge').innerHTML = [...groupes.entries()].sort((a, b) => a[0].localeCompare(b[0], 'fr')).map(([ecole, liste]) =>
+      `<div class="ex-groupe"><h4>${echapper(ecole)}</h4><div class="actions">${liste.map((ex) => `<button class="bouton petit" type="button" data-ex="${echapper(ex.id)}" title="${echapper(ex.description || '')}">${echapper(ex.nom)}</button>`).join('')}</div></div>`).join('');
+  }
   $('exemples-forge').addEventListener('click', (ev) => {
     const btn = ev.target.closest('[data-ex]');
     if (!btn) return;
@@ -554,6 +569,7 @@
     insertion = null;
     rendreNiveaux(); rendrePlan(); maj();
     notifier(`Exemple « ${ex.nom} » chargé.`);
+    $('exemples-details').open = false;
   });
 
   if (sort.blocs.length <= 1) insertion = sort.blocs.length;

@@ -4,7 +4,7 @@
    stockés dans Firestore (users/{uid}/sorts/{id}) et mis en cache dans le
    navigateur. Sans configuration Firebase, le site reste en mode local.
    ========================================================================== */
-import { firebaseConfig } from './firebase-config.js?v=11';
+import { firebaseConfig } from './firebase-config.js?v=12';
 
 const VERSION_SDK = '12.19.0';
 const CDN = `https://www.gstatic.com/firebasejs/${VERSION_SDK}`;

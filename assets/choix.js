@@ -9,7 +9,7 @@ const Choix = (() => {
   const nb = (x, d = 2) => M.formatNombre(x, d);
 
   // --- Icônes par paramètre (clé « bloc.param » ou « effet.param ») ----------
-  const MAT = { air: '💨', eau: '💧', pierre: '🪨', bois: '🪵', charbon: '⚫', fer: '⚙️', huile: '🛢️', glace: '🧊', vapeur: '♨️', chair: '🥩', or: '🪙' };
+  const MAT = { air: '💨', eau: '💧', pierre: '🪨', sable: '⏳', cuivre: '🟠', bois: '🪵', charbon: '⚫', fer: '⚙️', huile: '🛢️', glace: '🧊', vapeur: '♨️', chair: '🥩', or: '🪙' };
   const LUM = { '0.05': '✨', '1': '🕯️', '10': '🔦', '60': '🏮', '1000': '💡', '100000': '☀️' };
   const BOU = { '100': '🏹', '500': '⚔️', '3000': '🔫', '50000': '🐎', '1000000': '💣' };
   const ICONES = {
@@ -26,7 +26,11 @@ const Choix = (() => {
     'protection.seuil': '🛡️', 'protelec.seuil': '⚡',
     'bouclier.capacite': BOU, 'protection.capacite': BOU,
     'soin.blessure': { '0.1': '🩹', '2': '🩹', '20': '🩸', '150': '🦴', '500': '🫀', '4000': '🦾' },
-    'psyche.intensite': { '5': '💭', '50': '🗨️', '500': '🎭', '5000': '👑' },
+    'magnetiser.champ': '🧲',
+    'dissiper.cercle': { '1000': '✖️', '100000': '❎', '10000000': '⛔', '1000000000': '🚫' },
+    'regenerer.blessure': { '0.1': '🩹', '2': '🩹', '20': '🩸', '150': '🦴', '500': '🫀', '4000': '🦾' },
+    'purger.toxine': { '2000': '🍷', '20000': '🐍', '100000': '☠️', '500000': '⚗️' },
+    'psyche.intensite': { '5': '🫥', '10': '😌', '30': '😨', '50': '💭', '500': '🎭', '5000': '👑' },
     'transmutation.niveau': { '1000': '🫳', '10000000': '⚗️', '100000000000000': '☢️' },
   };
 

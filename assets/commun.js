@@ -4,7 +4,9 @@
     ['index.html', 'Accueil'],
     ['forge.html', 'La Forge'],
     ['grimoire.html', 'Grimoire'],
-    ['lois.html', 'Lois de la Matrice'],
+    ['ecoles.html', 'Écoles'],
+    ['lois.html', 'Lois'],
+    ['guide.html', 'Guide'],
   ];
   const courante = location.pathname.split('/').pop() || 'index.html';
   const logo = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">

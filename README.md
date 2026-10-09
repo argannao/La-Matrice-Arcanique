@@ -1,6 +1,6 @@
 # La Matrice Arcanique
 
-Système de magie **générique et réaliste** pour JDR. Un sort est un **blueprint** : une suite de blocs exécutés dans l'ordre, parmi 27 blocs répartis en six familles (fondation, matière, énergie, mouvement, protection, contrôle) — rassembler ou condenser la matière, changer d'état (chaleur latente réelle), façonner, fragmenter, compresser (adiabatique), chauffer, embraser (combustion), charger électriquement, imprégner de mouvement, téléporter, viser, guider, dissimuler, poser un piège… La Matrice simule l'état du sort à chaque bloc — température, temps, matière — avec la vraie physique (pertes de chaleur comprises), signale les erreurs de conception (brûlure du lanceur, flamme qui se disperse…) et convertit l'énergie dépensée en coût jouable (l'**Éther**).
+Système de magie **générique et réaliste** pour JDR. Un sort est un **blueprint** : une suite de blocs exécutés dans l'ordre, parmi une quarantaine de blocs répartis en sept familles (fondation, matière, énergie, mouvement, protection, vie & esprit, contrôle) — rassembler ou condenser la matière, changer d'état (chaleur latente réelle), façonner, fragmenter, compresser (adiabatique), chauffer, embraser (combustion), charger électriquement, imprégner de mouvement, téléporter, viser, guider, dissimuler, poser un piège… La Matrice simule l'état du sort à chaque bloc — température, temps, matière — avec la vraie physique (pertes de chaleur comprises), signale les erreurs de conception (brûlure du lanceur, flamme qui se disperse…) et convertit l'énergie dépensée en coût jouable (l'**Éther**).
 
 ## Modules
 
@@ -10,6 +10,8 @@ Système de magie **générique et réaliste** pour JDR. Un sort est un **bluepr
 | `forge.html` | Éditeur de blueprints : blocs réordonnables, état après chaque bloc, courbe de température, coût et dangers |
 | `grimoire.html` | Sorts sauvegardés (navigateur), sorts d'exemple, import / export JSON |
 | `lois.html` | Référence des règles : blueprints, blocs, physique des pertes, dangers, Éther et cercles |
+| `ecoles.html` | Les quinze écoles de magie : principes, forces, limites, blocs et sorts d'exemple |
+| `guide.html` | Guide de l'apprenti : premier sort pas à pas, lecture de la Forge, erreurs classiques, conversion pour son JDR |
 
 ## Structure
 
@@ -17,6 +19,8 @@ Système de magie **générique et réaliste** pour JDR. Un sort est un **bluepr
 assets/
   matrice.js   données de base (matériaux, effets directs, réglages, formatage, stockage)
   blueprint.js blocs du blueprint, simulation, coût, blueprints d'exemple
+  ecoles.js    descriptions des écoles de magie
+  choix.js     sélecteurs visuels des options de blocs
   commun.js    barre de navigation, pied de page, notifications
   compte.js    comptes (Google, GitHub, e-mail) et synchronisation du grimoire via Firebase
   firebase-config.js  configuration Firebase (null = site sans comptes)

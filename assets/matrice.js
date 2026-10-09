@@ -21,6 +21,8 @@ const Matrice = (() => {
     vapeur: { nom: 'Vapeur d\'eau', c: 2010 },
     huile:  { nom: 'Huile',          c: 2000 },
     charbon:{ nom: 'Charbon',        c: 710 },
+    cuivre: { nom: 'Cuivre',         c: 385 },
+    sable:  { nom: 'Sable',          c: 830 },
   };
 
   const opts = (obj) => Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, v.nom]));

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/style.css?v=11">
+  <link rel="stylesheet" href="assets/style.css?v=12">
   <style>
     .hero { padding: 3.5rem 0 2.5rem; display: grid; grid-template-columns: 1.3fr 1fr; gap: 2.5rem; align-items: center; }
     .hero .chapeau { font-size: 1.15rem; margin: 1.2rem 0 1.6rem; }
@@ -42,7 +42,7 @@
         <p class="chapeau">Ici, un sort est un plan de construction. On enchaîne les étapes — rassembler la matière, se protéger, chauffer, laisser monter, projeter — et la Matrice simule la physique de chaque étape pour en tirer le temps, le coût et les dangers.</p>
         <div class="actions">
           <a class="bouton principal" href="forge.html">Forger un sort</a>
-          <a class="bouton" href="lois.html">Comprendre les lois</a>
+          <a class="bouton" href="guide.html">Apprendre en 7 étapes</a>
         </div>
       </div>
       <div class="chaine" aria-label="Exemple de blueprint : boule de feu">
@@ -78,6 +78,18 @@
         <p>Le fonctionnement des blueprints, les blocs, la physique des pertes de chaleur et les cercles de puissance.</p>
         <span class="aller">Ouvrir →</span>
       </a>
+      <a class="carte module" href="ecoles.html">
+        <svg class="ico" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"/></svg>
+        <h3>Les Écoles</h3>
+        <p>Quinze écoles de magie, de la pyromancie à la psychomancie : principes, forces, limites, blocs et sorts d'exemple.</p>
+        <span class="aller">Ouvrir →</span>
+      </a>
+      <a class="carte module" href="guide.html">
+        <svg class="ico" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 5h6a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H4zM20 5h-6a2 2 0 0 0-2 2v13a2 2 0 0 1 2-2h6z"/></svg>
+        <h3>Guide de l'apprenti</h3>
+        <p>Ton premier sort pas à pas, comment lire la Forge, les erreurs classiques et comment brancher la Matrice sur ton JDR.</p>
+        <span class="aller">Ouvrir →</span>
+      </a>
     </div>
 
     <h2>Trois principes</h2>
@@ -87,7 +99,8 @@
       <div><h3>Le corps paie</h3><p>Le lanceur ne canalise qu'une fraction de ce qu'il puise. Dépasser sa réserve, c'est payer en chair.</p></div>
     </div>
   </main>
-  <script src="assets/commun.js?v=11"></script>
-  <script type="module" src="assets/compte.js?v=11"></script>
+  <script src="assets/matrice.js?v=12"></script>
+  <script src="assets/commun.js?v=12"></script>
+  <script type="module" src="assets/compte.js?v=12"></script>
 </body>
 </html>

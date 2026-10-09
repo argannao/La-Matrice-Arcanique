@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Les Écoles de magie</title>
+  <meta name="description" content="Les quinze écoles de La Matrice Arcanique : principes physiques, forces, limites, blocs et sorts d'exemple.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/style.css?v=12">
+  <style>
+    .rose { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 1.6rem 0 0.5rem; }
+    .rose a {
+      display: inline-flex; align-items: center; gap: 0.4rem; text-decoration: none; font-size: 0.86rem;
+      padding: 0.32rem 0.7rem 0.32rem 0.45rem; border-radius: 99px; color: var(--texte);
+      background: color-mix(in srgb, var(--c) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--c) 40%, transparent);
+    }
+    .rose a:hover { border-color: var(--c); }
+    .ecole { scroll-margin-top: 5rem; margin-top: 1.4rem; border-top: 3px solid var(--c); }
+    .ecole-tete { display: flex; gap: 1rem; align-items: flex-start; }
+    .ecole-ico {
+      flex-shrink: 0; width: 3.2rem; height: 3.2rem; border-radius: 12px; display: grid; place-items: center; font-size: 1.7rem;
+      background: color-mix(in srgb, var(--c) 14%, transparent); border: 1px solid color-mix(in srgb, var(--c) 40%, transparent);
+    }
+    .ecole h2 { margin: 0; font-size: 1.9rem; }
+    .devise { font-family: var(--serif); font-style: italic; color: var(--c); font-size: 1.1rem; margin-top: 0.15rem; }
+    .ecole > p { color: var(--texte-doux); max-width: 70ch; }
+    .colonnes { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.8rem; margin: 1rem 0; }
+    .colonne { background: var(--bg-2); border: 1px solid var(--ligne); border-radius: 9px; padding: 0.8rem 0.95rem; }
+    .colonne h3 { font-family: var(--mono); font-size: 0.7rem; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--texte-faible); margin: 0 0 0.45rem; }
+    .colonne p, .colonne li { font-size: 0.9rem; color: var(--texte-doux); margin: 0; }
+    .colonne ul { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.25rem; }
+    .colonne.plus li::marker { content: '+  '; color: var(--sur); }
+    .colonne.moins li::marker { content: '−  '; color: var(--critique); }
+    .conseil { border-left: 3px solid var(--c); background: var(--bg-2); border-radius: 0 8px 8px 0; padding: 0.6rem 0.9rem; font-size: 0.92rem; }
+    .conseil b { color: var(--c); }
+    .liens { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0.8rem; margin-top: 1rem; }
+    .liens h3 { font-family: var(--mono); font-size: 0.7rem; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--texte-faible); margin: 0 0 0.45rem; }
+    .puces { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+    .puce-bloc { font-size: 0.8rem; padding: 0.2rem 0.55rem; border-radius: 6px; background: var(--bg-2); border: 1px solid var(--ligne); border-left: 3px solid var(--cb); color: var(--texte); }
+    .puce-sort { font-size: 0.82rem; padding: 0.25rem 0.6rem; border-radius: 6px; text-decoration: none; background: var(--surface-2); border: 1px solid var(--ligne-forte); color: var(--texte); }
+    .puce-sort:hover { border-color: var(--c); color: var(--c); }
+    .puce-sort small { color: var(--texte-faible); font-family: var(--mono); font-size: 0.7rem; margin-left: 0.3rem; }
+    .vide-mini { font-size: 0.85rem; color: var(--texte-faible); }
+    .fondation { margin-top: 1.4rem; }
+  </style>
+</head>
+<body>
+  <main class="page etroit">
+    <div class="surtitre">Référence</div>
+    <h1>Les Écoles de magie</h1>
+    <p class="chapeau">Dans la Matrice, une école n'est pas une tradition mystique : c'est une famille de lois physiques. Chacune a ses forces, ses pièges et sa manière de payer le prix de la magie. Les meilleurs mages en combinent plusieurs dans un même blueprint.</p>
+    <nav class="rose" id="rose" aria-label="Écoles"></nav>
+    <section class="carte fondation">
+      <h3 style="color:var(--laiton)">Et la Fondation ?</h3>
+      <p style="margin:0;color:var(--texte-doux)">Ancrer, attendre, poser un piège, libérer : ces blocs n'appartiennent à aucune école, car tout sort en a besoin. Ce sont les gestes de base que tout apprenti maîtrise avant de choisir une voie.</p>
+    </section>
+    <div id="ecoles"></div>
+  </main>
+
+  <script src="assets/matrice.js?v=12"></script>
+  <script src="assets/blueprint.js?v=12"></script>
+  <script src="assets/ecoles.js?v=12"></script>
+  <script src="assets/commun.js?v=12"></script>
+  <script>
+  (() => {
+    const M = Matrice, B = Blueprint, R = M.reglages();
+    const appartient = (ecole, nom) => (ecole || '').split(' / ').includes(nom);
+    document.getElementById('rose').innerHTML = ECOLES.map((e) => `<a href="#${e.id}" style="--c:${e.couleur}"><span aria-hidden="true">${e.icone}</span>${echapper(e.nom)}</a>`).join('');
+    document.getElementById('ecoles').innerHTML = ECOLES.map((e) => {
+      const blocs = Object.values(B.BLOCS).filter((b) => appartient(b.ecole, e.nom));
+      const effets = Object.values(M.EFFETS).filter((x) => appartient(x.ecole, e.nom));
+      const sorts = EXEMPLES.filter((s) => s.ecole === e.nom);
+      return `<section class="carte ecole" id="${e.id}" style="--c:${e.couleur}">
+        <div class="ecole-tete">
+          <div class="ecole-ico" aria-hidden="true">${e.icone}</div>
+          <div><h2>${echapper(e.nom)}</h2><div class="devise">« ${echapper(e.devise)} »</div></div>
+        </div>
+        <p>${echapper(e.description)}</p>
+        <div class="colonnes">
+          <div class="colonne"><h3>Principe</h3><p>${echapper(e.principe)}</p></div>
+          <div class="colonne plus"><h3>Forces</h3><ul>${e.forces.map((f) => `<li>${echapper(f)}</li>`).join('')}</ul></div>
+          <div class="colonne moins"><h3>Limites</h3><ul>${e.limites.map((f) => `<li>${echapper(f)}</li>`).join('')}</ul></div>
+        </div>
+        <div class="conseil"><b>Conseil de maître :</b> ${echapper(e.conseil)}</div>
+        <div class="liens">
+          <div><h3>Blocs de l'école</h3><div class="puces">${
+            blocs.length || effets.length
+              ? blocs.map((b) => `<span class="puce-bloc" style="--cb:${b.couleur}" title="${echapper(b.description)}">${echapper(b.nom)}</span>`).join('')
+                + effets.map((x) => `<span class="puce-bloc" style="--cb:#d6a95e" title="${echapper(x.description)}">Effet direct · ${echapper(x.nom)}</span>`).join('')
+              : '<span class="vide-mini">Aucun bloc propre : l\'école emprunte ceux des autres.</span>'}</div></div>
+          <div><h3>Sorts d'exemple</h3><div class="puces">${
+            sorts.length
+              ? sorts.map((s) => `<a class="puce-sort" href="forge.html?exemple=${encodeURIComponent(s.id)}">${echapper(s.nom)}<small>${B.simuler(s, R).ether} Éther</small></a>`).join('')
+              : '<span class="vide-mini">Pas encore d\'exemple : à toi de forger le premier.</span>'}</div></div>
+        </div>
+      </section>`;
+    }).join('');
+  })();
+  </script>
+  <script type="module" src="assets/compte.js?v=12"></script>
+</body>
+</html>

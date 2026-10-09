@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Guide de l'apprenti</title>
+  <meta name="description" content="Apprendre à construire un sort dans La Matrice Arcanique : premier blueprint pas à pas, lecture de la Forge, erreurs classiques, adaptation à son JDR.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/style.css?v=12">
+  <style>
+    section { scroll-margin-top: 5rem; }
+    .sommaire { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 1.5rem 0; }
+    .sommaire a { font-size: 0.85rem; text-decoration: none; padding: 0.3rem 0.65rem; border: 1px solid var(--ligne); border-radius: 99px; color: var(--texte-doux); }
+    .sommaire a:hover { color: var(--arcane); border-color: var(--arcane); }
+    .plan-guide {
+      background-color: #0f1726;
+      background-image: linear-gradient(rgba(111,168,232,.08) 1px, transparent 1px), linear-gradient(90deg, rgba(111,168,232,.08) 1px, transparent 1px);
+      background-size: 40px 40px; border: 1px solid #263552; border-radius: var(--rayon); padding: 1.1rem; margin-top: 1rem;
+    }
+    .pas { display: grid; grid-template-columns: minmax(0, 1fr); position: relative; }
+    .pas + .pas { margin-top: 26px; }
+    .pas + .pas::before { content: ''; position: absolute; top: -26px; left: 50%; width: 2px; height: 26px; background: linear-gradient(#3b5a8a, #6fa8e8); }
+    .pas-carte { background: rgba(23,26,38,.96); border: 1px solid var(--ligne); border-left: 4px solid var(--c); border-radius: 9px; padding: 0.8rem 1rem; }
+    .pas-carte h3 { margin: 0; font-size: 1.2rem; display: flex; gap: 0.5rem; align-items: baseline; flex-wrap: wrap; }
+    .pas-carte h3 .num { font-family: var(--mono); font-size: 0.75rem; color: var(--c); }
+    .pas-carte h3 .reglage { font-family: var(--mono); font-size: 0.72rem; color: var(--texte-faible); font-weight: 400; }
+    .pas-carte p { margin: 0.35rem 0 0; color: var(--texte-doux); font-size: 0.92rem; }
+    .pas-carte .pourquoi { margin-top: 0.45rem; font-size: 0.85rem; color: var(--texte); }
+    .pas-carte .pourquoi b { color: var(--c); }
+    .lecture { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.8rem; }
+    .lecture .carte h3 { color: var(--laiton); font-size: 1.15rem; }
+    .lecture .carte p { margin: 0; color: var(--texte-doux); font-size: 0.9rem; }
+    .alerte-ex { font-size: 0.85rem; padding: 0.45rem 0.65rem; border-radius: 6px; border-left: 3px solid; background: var(--bg-2); margin-top: 0.45rem; }
+    .alerte-ex.danger { border-color: var(--critique); color: #f2b5b6; }
+    .alerte-ex.attention { border-color: var(--modere); color: #eedd9e; }
+    .alerte-ex.info { border-color: var(--arcane-sombre); color: var(--texte-doux); }
+    .erreurs { counter-reset: e; display: grid; gap: 0.7rem; list-style: none; padding: 0; }
+    .erreurs li { counter-increment: e; display: grid; grid-template-columns: 2.2rem 1fr; gap: 0.8rem; background: var(--surface); border: 1px solid var(--ligne); border-radius: 9px; padding: 0.8rem 1rem; }
+    .erreurs li::before { content: counter(e); font-family: var(--serif); font-size: 1.8rem; color: var(--critique); line-height: 1; }
+    .erreurs b { display: block; }
+    .erreurs span { color: var(--texte-doux); font-size: 0.9rem; }
+    .erreurs .fix { display: block; margin-top: 0.25rem; color: var(--sur); font-size: 0.88rem; }
+    details.faq { background: var(--surface); border: 1px solid var(--ligne); border-radius: 9px; padding: 0.75rem 1rem; }
+    details.faq + details.faq { margin-top: 0.5rem; }
+    details.faq summary { cursor: pointer; font-weight: 600; }
+    details.faq p { color: var(--texte-doux); margin: 0.5rem 0 0; font-size: 0.92rem; }
+    .appel { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1.2rem; }
+  </style>
+</head>
+<body>
+  <main class="page etroit">
+    <div class="surtitre">Apprendre</div>
+    <h1>Guide de l'apprenti</h1>
+    <p class="chapeau">Un sort de la Matrice se construit comme un plan de montage : une suite de gestes, dans l'ordre, dont chacun a un coût et une durée. Ce guide t'accompagne de ton premier blueprint jusqu'à la table de jeu.</p>
+
+    <nav class="sommaire">
+      <a href="#premier">Premier sort pas à pas</a>
+      <a href="#lire">Lire la Forge</a>
+      <a href="#erreurs">Les erreurs classiques</a>
+      <a href="#table">À ta table</a>
+      <a href="#faq">Questions fréquentes</a>
+    </nav>
+
+    <section id="premier">
+      <h2>Ton premier sort : la boule de feu</h2>
+      <p>On va construire une boule de feu « propre » : elle ne brûle pas son lanceur, ne gaspille pas sa chaleur et arrive entière sur sa cible. Chaque étape correspond à un bloc de la Forge.</p>
+      <div class="plan-guide">
+        <div class="pas"><div class="pas-carte" style="--c:#8a93b8"><h3><span class="num">01</span>Ancrage <span class="reglage">dans la main</span></h3>
+          <p>Le sort doit naître quelque part. Dans la main, rien ne se perd avec la distance, mais tout ce qui arrive au sort, ta main le ressent.</p>
+          <p class="pourquoi"><b>Pourquoi en premier ?</b> Sans ancrage, la Matrice ne sait pas où créer le sort, et tous les coûts dépendent de cette distance.</p></div></div>
+        <div class="pas"><div class="pas-carte" style="--c:#6fa8e8"><h3><span class="num">02</span>Protection thermique <span class="reglage">± 1 000 °C</span></h3>
+          <p>Ta main supporte environ 50 °C. La boule va monter à 800 °C : il faut la protection avant de chauffer, pas après.</p>
+          <p class="pourquoi"><b>L'ordre compte :</b> placée après le bloc de chaleur, la protection arrive trop tard, et la Forge signale une brûlure.</p></div></div>
+        <div class="pas"><div class="pas-carte" style="--c:#a3a08a"><h3><span class="num">03</span>Rassembler la matière <span class="reglage">2 kg d'air</span></h3>
+          <p>Le feu a besoin de quelque chose à chauffer. Deux kilogrammes d'air, c'est environ 1,7 m³ condensés au creux de ta paume.</p>
+          <p class="pourquoi"><b>Astuce :</b> du bois ou de l'huile s'embraseraient et fourniraient leur propre énergie (bloc « Embraser »).</p></div></div>
+        <div class="pas"><div class="pas-carte" style="--c:#6fa8e8"><h3><span class="num">04</span>Confinement</h3>
+          <p>Une bulle de force garde la chaleur et la masse ensemble. Sans elle, la chaleur fuit vingt-cinq fois plus vite et la flamme se disperse en vol.</p>
+          <p class="pourquoi"><b>Le prix :</b> le confinement s'entretient (500 W/kg) tant que le sort existe.</p></div></div>
+        <div class="pas"><div class="pas-carte" style="--c:#e8904e"><h3><span class="num">05</span>Chauffer <span class="reglage">200 kW jusqu'à 800 °C</span></h3>
+          <p>La seule étape vraiment longue : environ huit secondes. Avec moins de puissance, ce serait plus long ; trop peu, et les pertes égaleraient l'apport.</p>
+          <p class="pourquoi"><b>À surveiller :</b> l'onglet « Température » de la Forge montre la montée et la limite que supporte ta main.</p></div></div>
+        <div class="pas"><div class="pas-carte" style="--c:#62d6c6"><h3><span class="num">06</span>Imprégner de mouvement <span class="reglage">25 m/s vers une cible à 20 m</span></h3>
+          <p>La boule quitte ta main : la protection se relâche, et pendant 0,8 s de vol, la chaleur continue de s'échapper un peu.</p>
+          <p class="pourquoi"><b>Plus loin que 30 m ?</b> Ajoute « Viser » ou « Guidage », sinon la Forge t'avertit que tu risques de manquer.</p></div></div>
+        <div class="pas"><div class="pas-carte" style="--c:#e2565a"><h3><span class="num">07</span>Libération <span class="reglage">explosion</span></h3>
+          <p>Le confinement se rompt et environ 1,6 MJ se déchargent sur la zone. Libérée encore dans ta main, l'explosion serait pour toi.</p>
+          <p class="pourquoi"><b>Bilan :</b> environ 23 Éther pour un maître, Cercle III. Un adepte s'épuiserait, un novice ne pourrait pas le lancer.</p></div></div>
+      </div>
+      <div class="appel">
+        <a class="bouton principal" href="forge.html?exemple=ex-boule-de-feu">Ouvrir cette boule de feu dans la Forge</a>
+        <a class="bouton" href="forge.html?exemple=ex-flamme-nue">Voir la version ratée</a>
+      </div>
+    </section>
+
+    <section id="lire">
+      <h2>Lire la Forge</h2>
+      <div class="lecture">
+        <div class="carte"><h3>Le coût en Éther</h3><p>L'unité de jeu. Il dépend de l'énergie puisée, sur une échelle logarithmique : dix fois plus d'énergie ne coûte qu'un peu plus d'Éther. La jauge le compare à la réserve du lanceur.</p></div>
+        <div class="carte"><h3>Le cercle</h3><p>La puissance du sort, de Cercle 0 (étincelle) à Cercle V (cataclysme). Pratique pour fixer une difficulté ou un niveau de sort dans ton système.</p></div>
+        <div class="carte"><h3>Le temps de charge</h3><p>La durée d'incantation, jusqu'au lancement. Les opérations mentales sont brèves ; ce sont la chaleur, les changements d'état et les soins qui prennent du temps.</p></div>
+        <div class="carte"><h3>Énergie puisée et entretiens</h3><p>Tout ce que le lanceur a dû fournir, rendement compris. Les entretiens (protections, confinement, charge…) sont la part payée pendant la durée du sort.</p></div>
+        <div class="carte"><h3>Délivrée à l'impact</h3><p>Ce que la cible reçoit vraiment, après les pertes en vol et le rendement de la forme de libération. Pour un soin : les tissus reconstruits.</p></div>
+        <div class="carte"><h3>Les courbes</h3><p>Trois onglets : température (avec la limite du lanceur), électricité (charge, isolation, zones d'électrocution) et énergie dépensée au fil du temps.</p></div>
+      </div>
+      <h3 style="margin-top:1.4rem">Les trois niveaux d'alerte</h3>
+      <div class="alerte-ex danger"><b>Danger</b> — le sort blesse son lanceur ou son patient, ou ne peut pas fonctionner. À corriger.</div>
+      <div class="alerte-ex attention"><b>Attention</b> — le sort marche, mais moins bien que prévu (puissance insuffisante, flamme dispersée…).</div>
+      <div class="alerte-ex info"><b>Info</b> — ce qui se passe à cette étape : durée de vol, énergie récupérée, nombre d'impacts…</div>
+    </section>
+
+    <section id="erreurs">
+      <h2>Les erreurs classiques</h2>
+      <ol class="erreurs">
+        <li><div><b>Chauffer avant de se protéger</b><span>La main brûle pendant la montée en température.</span><span class="fix">→ Place « Protection thermique » juste après l'ancrage.</span></div></li>
+        <li><div><b>Lancer un gaz brûlant sans confinement</b><span>La flamme se disperse et arrive refroidie.</span><span class="fix">→ Ajoute « Confinement » avant de chauffer.</span></div></li>
+        <li><div><b>Libérer sans avoir lancé</b><span>L'explosion a lieu dans ta main.</span><span class="fix">→ « Imprégner de mouvement » ou « Projeter par translocation » avant « Libération ».</span></div></li>
+        <li><div><b>Charger sans isolation</b><span>Électrocution dès que la charge dépasse quelques joules.</span><span class="fix">→ « Isolation électrique » d'un seuil supérieur à la charge.</span></div></li>
+        <li><div><b>Vouloir faire bouillir l'eau au-delà de 100 °C</b><span>La matière s'arrête à son point d'ébullition.</span><span class="fix">→ « Changer d'état : vaporiser », puis continuer à chauffer.</span></div></li>
+        <li><div><b>Soigner trop vite</b><span>Le patient brûle de fièvre ; sans anesthésie, il perd connaissance.</span><span class="fix">→ Diagnostiquer, anesthésier, et baisser le rythme de régénération.</span></div></li>
+        <li><div><b>Garder un sort trop longtemps</b><span>Chaque seconde d'entretien coûte : un piège ou une charge tenue longtemps s'épuise.</span><span class="fix">→ Lance dès que le sort est prêt, ou réduis ce qui s'entretient.</span></div></li>
+      </ol>
+    </section>
+
+    <section id="table">
+      <h2>À ta table de jeu</h2>
+      <p>La Matrice donne un coût, un temps et des risques ; c'est à toi de les brancher sur ton système. Quelques conversions qui marchent bien :</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Temps de charge</th><th>En jeu (tours de 6 s)</th></tr></thead>
+        <tbody>
+          <tr><td class="num">&lt; 1 s</td><td>Réaction ou action bonus</td></tr>
+          <tr><td class="num">1 à 6 s</td><td>Une action</td></tr>
+          <tr><td class="num">6 à 12 s</td><td>Se lance au début du tour suivant (concentration)</td></tr>
+          <tr><td class="num">12 s à 1 min</td><td>Plusieurs tours de concentration, interruptible</td></tr>
+          <tr><td class="num">&gt; 1 min</td><td>Rituel, hors combat</td></tr>
+        </tbody>
+      </table></div>
+      <div class="table-wrap" style="margin-top:.8rem"><table>
+        <thead><tr><th>Cercle</th><th>Équivalent indicatif</th><th>Qui peut le lancer</th></tr></thead>
+        <tbody>
+          <tr><td>Cercle 0 — Étincelle</td><td>Tour de magie</td><td>Tout le monde</td></tr>
+          <tr><td>Cercle I — Mineur</td><td>Sort de niveau 1–2</td><td>Novice</td></tr>
+          <tr><td>Cercle II — Modéré</td><td>Sort de niveau 3–4</td><td>Adepte</td></tr>
+          <tr><td>Cercle III — Majeur</td><td>Sort de niveau 5–6</td><td>Maître</td></tr>
+          <tr><td>Cercle IV — Légendaire</td><td>Sort de niveau 7–9</td><td>Archimage</td></tr>
+          <tr><td>Cercle V — Cataclysmique</td><td>Hors de portée</td><td>Rituel collectif, artefact…</td></tr>
+        </tbody>
+      </table></div>
+      <ul style="margin-top:1rem;color:var(--texte-doux)">
+        <li><strong>Points de magie :</strong> l'Éther remplace directement les points de mana ; la réserve se remplit après une nuit de repos.</li>
+        <li><strong>Dégâts :</strong> une règle simple consiste à donner 1 dé de dégâts par tranche de ×10 d'énergie délivrée au-delà de 1 kJ.</li>
+        <li><strong>Contrecoup :</strong> chaque Éther au-delà de la réserve coûte des points de vie ou un niveau de fatigue.</li>
+        <li><strong>Réglages de table :</strong> dans la Forge, la progression du coût, la portée de référence, les rendements et les réserves s'ajustent pour une magie plus rare ou plus commune.</li>
+      </ul>
+    </section>
+
+    <section id="faq">
+      <h2>Questions fréquentes</h2>
+      <details class="faq"><summary>Pourquoi mon sort de soin coûte-t-il autant qu'une boule de feu ?</summary><p>Parce que reconstruire de la chair demande réellement beaucoup d'énergie (environ 25 kJ par gramme). Détruire est facile, réparer coûte cher : c'est voulu. Le bloc « Diagnostiquer » réduit le coût de 30 %.</p></details>
+      <details class="faq"><summary>Un sort peut-il coûter zéro Éther ?</summary><p>Oui, si un siphon de chaleur ou une combustion couvre tout le reste. C'est rare, et ça prend souvent du temps : c'est la récompense des mages qui utilisent leur environnement.</p></details>
+      <details class="faq"><summary>Pourquoi les opérations mentales sont-elles presque instantanées ?</summary><p>La concentration n'est pas ce qui limite un mage : c'est l'énergie et la physique. Si tu préfères une magie plus lente, augmente le réglage « Durée des opérations mentales » dans la Forge.</p></details>
+      <details class="faq"><summary>Les chiffres sont-ils vraiment physiques ?</summary><p>Les formules étiquetées « physique réelle » le sont (chaleur, cinétique, électricité, changements d'état). Celles marquées « loi inventée » sont des règles de la Matrice, cohérentes mais imaginaires : téléportation, perception, esprit…</p></details>
+      <details class="faq"><summary>Comment partager mes sorts avec ma table ?</summary><p>Depuis la Forge : « Copier la fiche » pour un texte à coller, ou « Exporter » pour un fichier. Depuis le Grimoire, tu peux exporter et importer tout un grimoire.</p></details>
+    </section>
+  </main>
+  <script src="assets/matrice.js?v=12"></script>
+  <script src="assets/commun.js?v=12"></script>
+  <script type="module" src="assets/compte.js?v=12"></script>
+</body>
+</html>

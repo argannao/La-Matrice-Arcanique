@@ -83,6 +83,7 @@ const Blueprint = (() => {
     energie: 'Énergie',
     mouvement: 'Mouvement',
     protection: 'Protection',
+    vie: 'Vie & esprit',
     controle: 'Contrôle & perception',
   };
 
@@ -97,7 +98,11 @@ const Blueprint = (() => {
     pierre: { fusion: { T: 1200, L: 400e3 } },
     air:    { ebullition: { T: -194, L: 200e3 } },
     huile:  { ebullition: { T: 300, L: 300e3 } },
+    cuivre: { fusion: { T: 1085, L: 205e3 }, ebullition: { T: 2562, L: 4730e3 } },
+    sable:  { fusion: { T: 1700, L: 156e3 } },
   };
+  const CONDUCTEURS = ['cuivre', 'or', 'fer'];
+  const DENSITES = { air: 1.2, vapeur: 0.6, eau: 1000, glace: 917, pierre: 2600, fer: 7870, bois: 600, or: 19300, chair: 1000, huile: 900, charbon: 1400, cuivre: 8960, sable: 1600 };
   const COMBUSTIBLES = {
     bois:    { pci: 15e6, ignition: 300, flamme: 1100 },
     charbon: { pci: 30e6, ignition: 400, flamme: 1400 },
@@ -252,6 +257,7 @@ const Blueprint = (() => {
           ctx.alerte('info', `Arc sur ${p.cibles} cibles : ${parts2.map((f) => M.formatEnergie(total * f / somme)).join(', ')}.`);
         }
         if (fragments > 1 && total > 0) ctx.alerte('info', `${fragments} impacts d'environ ${M.formatEnergie(total / fragments)} chacun.`);
+        if (e.silence && total > 0) ctx.alerte('info', 'La libération est parfaitement silencieuse.');
         if (e.piege) ctx.alerte('info', `Se déclenche ${({ duree: 'après le délai', contact: 'au contact', proximite: 'à l\'approche d\'un être vivant', mot: 'sur le mot de commande' })[e.piege]}.`);
         e.entretiens = {};
       },
@@ -263,7 +269,7 @@ const Blueprint = (() => {
       description: 'Attirer et condenser de la matière ambiante au point d\'ancrage (air, eau d\'une source, pierre du sol, bois, charbon…). Loi inventée : 300 J par kilogramme.',
       formule: 'E = m · 300 J/kg',
       params: [
-        { id: 'matiere', label: 'Matière', type: 'select', def: 'air', options: Object.fromEntries(['air', 'eau', 'pierre', 'bois', 'charbon', 'fer', 'huile'].map((k) => [k, nomMat(k)])) },
+        { id: 'matiere', label: 'Matière', type: 'select', def: 'air', options: Object.fromEntries(['air', 'eau', 'pierre', 'sable', 'bois', 'charbon', 'fer', 'cuivre', 'huile'].map((k) => [k, nomMat(k)])) },
         { id: 'masse', label: 'Masse', unite: 'kg', def: 1, min: 0.001, step: 0.1 },
       ],
       appliquer(e, p, ctx) {
@@ -429,13 +435,15 @@ const Blueprint = (() => {
     charger: {
       fam: 'energie', nom: 'Charger électriquement', ecole: 'Électromancie', nature: 'mixte', couleur: '#e0d35a',
       description: 'Accumule une charge électrique dans le sort (rendement 80 %). La charge fuit en permanence et doit être entretenue ; tenue dans la main sans protection, elle électrocute le lanceur.',
-      formule: 'E = charge / 0,8   ·   entretien = 2 % de la charge par seconde',
+      formule: 'E = charge / 0,8 (0,95 sur un métal)   ·   fuite = 2 %/s (0,5 %/s sur un métal)',
       params: [{ id: 'charge', label: 'Énergie stockée', unite: 'kJ', def: 50, min: 0.001, step: 5 }],
       appliquer(e, p, ctx) {
         const J = p.charge * 1000;
+        const conducteur = e.matiere && CONDUCTEURS.includes(e.matiere.type);
         e.charge += J;
-        e.entretiens.charge = 0.02 * e.charge;
-        ctx.energie(J / 0.8);
+        e.entretiens.charge = (conducteur ? 0.005 : 0.02) * e.charge;
+        ctx.energie(J / (conducteur ? 0.95 : 0.8));
+        if (conducteur) ctx.alerte('info', `${nomMat(e.matiere.type)} conduit le courant : rendement 95 % et fuite réduite à 0,5 %/s.`);
         ctx.mental(0.2);
       },
     },
@@ -491,7 +499,7 @@ const Blueprint = (() => {
         ctx.energie(0.5 * e.matiere.masse * p.vitesse ** 2);
         ctx.lancer(p.distance);
         e.v = p.vitesse;
-        if (p.distance > 30 && !e.vise && !e.guide) ctx.alerte('attention', 'À plus de 30 m sans « Viser » ni « Guidage », le projectile a de bonnes chances de manquer.');
+        if (p.distance > 30 && !e.vise && !e.guide && !e.aimant) ctx.alerte('attention', 'À plus de 30 m sans « Viser » ni « Guidage », le projectile a de bonnes chances de manquer.');
         const T0 = e.T;
         ctx.evoluer(p.distance / p.vitesse);
         const fluide = ['air', 'vapeur', 'eau'].includes(e.matiere.type);
@@ -627,6 +635,182 @@ const Blueprint = (() => {
         ctx.mental(0.2);
       },
     },
+    /* ===================== ÉNERGIE (suite) ===================== */
+    siphon: {
+      fam: 'energie', nom: 'Siphonner la chaleur', ecole: 'Cryomancie', nature: 'mixte', couleur: '#8fc4f5',
+      description: 'Aspire la chaleur de la matière du sort au lieu de la chasser : la matière refroidit et 40 % de la chaleur extraite paient les autres blocs du sort. Un cryomancien près d\'un étang lance des sorts presque gratuits… à condition d\'avoir le temps.',
+      formule: 'coût réduit de 40 % · m · c · (T₀ − T)   ·   m·c·dT/dt = −P − h·(T − T_amb)',
+      params: [
+        { id: 'puissance', label: 'Puissance d\'aspiration', unite: 'kW', def: 10, min: 0.001, step: 5 },
+        { id: 'cible', label: 'Température visée', unite: '°C', def: 0, step: 10 },
+      ],
+      appliquer(e, p, ctx) {
+        if (!e.matiere) { ctx.alerte('danger', 'Rien à siphonner : rassemble d\'abord de la matière (de l\'eau, de la pierre chauffée au soleil…).'); return; }
+        if (p.cible >= e.T) { ctx.alerte('attention', `La matière est déjà à ${M.formatNombre(e.T, 0)} °C : il n\'y a rien à aspirer au-dessus de cette température.`); return; }
+        const m = e.matiere.masse, c = M.MATERIAUX[e.matiere.type].c;
+        let Tc = p.cible;
+        const b = barriere(e, -1);
+        if (b && Tc < b.T) { ctx.alerte('attention', `La matière s'arrête à ${M.formatNombre(b.T, 0)} °C (point ${b.txt}). Ajoute « Changer d'état » pour aller plus loin.`); Tc = b.T; }
+        const P = p.puissance * 1000, h = ctx.pertes(), tau = (m * c) / h;
+        const T0 = e.T, Teq = AMBIANTE - P / h;
+        let t;
+        if (Tc <= Teq) { t = tau * Math.log(20); ctx.alerte('attention', `Aspiration trop faible : l'air ambiant réchauffe la matière aussi vite, elle plafonne vers ${M.formatNombre(Teq, 0)} °C.`); }
+        else t = tau * Math.log((T0 - Teq) / (Tc - Teq));
+        ctx.energie(100);
+        ctx.evoluer(t, -P, { plafond: Tc });
+        const Q = m * c * Math.max(0, T0 - e.T);
+        const rendu = ctx.rendre(0.4 * Q);
+        const reste = 0.4 * Q - rendu;
+        e.credit += reste;
+        ctx.alerte('info', `${M.formatEnergie(Q)} de chaleur aspirés en ${M.formatNombre(t, 1)} s : ${M.formatEnergie(rendu)} remboursent les blocs précédents${reste > 1 ? `, ${M.formatEnergie(reste)} restent en réserve pour les blocs suivants` : ''}.`);
+      },
+    },
+    magnetiser: {
+      fam: 'energie', nom: 'Aimanter', ecole: 'Électromancie', nature: 'rigoureux', couleur: '#e0d35a',
+      description: 'Crée un champ magnétique dans la matière du sort. Seuls le fer et l\'acier s\'aimantent vraiment : un projectile aimanté file vers les armures et les lames, même sans viser.',
+      formule: 'E = B² / (2 μ₀) · V · 10   (champ étendu à ~10 fois le volume)',
+      params: [{ id: 'champ', label: 'Intensité du champ', type: 'select', def: '0.5', options: { '0.05': '0,05 T (aimant de frigo)', '0.5': '0,5 T (aimant puissant)', '1.5': '1,5 T (électroaimant de grue)', '5': '5 T (aimant d\'IRM)' } }],
+      appliquer(e, p, ctx) {
+        if (!e.matiere) { ctx.alerte('danger', 'Il n\'y a pas de matière à aimanter.'); return; }
+        const B = Number(p.champ), V = e.matiere.masse / (DENSITES[e.matiere.type] || 1000);
+        const E = (B * B) / (2 * 4e-7 * Math.PI) * V * 10;
+        ctx.energie(E);
+        ctx.mental(0.2);
+        if (e.matiere.type !== 'fer') { ctx.alerte('attention', `${nomMat(e.matiere.type)} ne s'aimante pas : le champ se dissipe sans rien retenir. Utilise du fer.`); return; }
+        if (e.T > 770) { ctx.alerte('attention', 'Au-dessus de 770 °C (point de Curie), le fer perd son aimantation : le champ ne tient pas.'); return; }
+        e.aimant = B;
+        ctx.alerte('info', `Le projectile est attiré par le métal à portée : il n'a plus besoin de visée contre une cible en armure.`);
+      },
+    },
+
+    /* ===================== CONTRÔLE (suite) ===================== */
+    silence: {
+      fam: 'controle', nom: 'Étouffer le son', ecole: 'Illusion', nature: 'inspire', couleur: '#b08be0',
+      description: 'Une bulle d\'air immobile absorbe toutes les vibrations autour du sort : il vole et éclate sans un bruit. S\'entretient tant que le sort existe.',
+      formule: 'mise en place = 50 J   ·   entretien = 40 W',
+      params: [],
+      appliquer(e, p, ctx) {
+        e.silence = true;
+        e.entretiens.silence = 40;
+        ctx.energie(50);
+        ctx.mental(0.2);
+      },
+    },
+    percevoir: {
+      fam: 'controle', nom: 'Percevoir la magie', ecole: 'Divination', nature: 'inspire', couleur: '#b08be0',
+      description: 'Ouvre les sens du lanceur aux flux d\'Éther : il voit les sorts dissimulés, les runes et les pièges dans un rayon donné, tant qu\'il maintient sa concentration.',
+      formule: 'E = 2 J/m² de zone sondée + 10 W d\'entretien',
+      params: [{ id: 'rayon', label: 'Rayon sondé', unite: 'm', def: 15, min: 1 }],
+      appliquer(e, p, ctx) {
+        e.percoit = p.rayon;
+        e.entretiens.perception = 10;
+        ctx.energie(2 * Math.PI * p.rayon ** 2, { sansDistance: true });
+        ctx.mental(0.5);
+        ctx.alerte('info', `Tu perçois toute magie à ${p.rayon} m : dissimulations, runes, pièges et sorts en cours d'incantation.`);
+      },
+    },
+    dissiper: {
+      fam: 'controle', nom: 'Dissiper un sort', ecole: 'Abjuration', nature: 'inspire', couleur: '#6fa8e8',
+      description: 'Contre-sort : défait la trame d\'un sort adverse. Il faut injecter environ la moitié de l\'énergie qu\'il contient — un sort mineur se dissipe d\'un geste, un sort majeur épuise.',
+      formule: 'E = 50 % de l\'énergie du sort visé',
+      params: [{ id: 'cercle', label: 'Sort à dissiper', type: 'select', def: '100000', options: { '1000': 'Cercle I — mineur (~1 kJ)', '100000': 'Cercle II — modéré (~100 kJ)', '10000000': 'Cercle III — majeur (~10 MJ)', '1000000000': 'Cercle IV — légendaire (~1 GJ)' } }],
+      appliquer(e, p, ctx) {
+        const E = Number(p.cercle);
+        if (estProche(e.ancre)) ctx.alerte('info', 'Pour un sort lancé par un autre, ancre le contre-sort sur le sort visé (à distance ou sur une créature) pour le défaire à la source.');
+        ctx.energie(0.5 * E);
+        ctx.mental(0.4);
+        ctx.alerte('info', `La trame adverse se défait : ${M.formatEnergie(0.5 * E)} injectés pour annuler un sort de ~${M.formatEnergie(E)}.`);
+      },
+    },
+
+    /* ===================== VIE & ESPRIT ===================== */
+    diagnostiquer: {
+      fam: 'vie', nom: 'Diagnostiquer', ecole: 'Biomancie', nature: 'inspire', couleur: '#7fd39b',
+      description: 'Le guérisseur sonde le corps du patient : il voit les blessures, les poisons et les os brisés. Les soins qui suivent sont 30 % moins coûteux, car il ne répare que ce qui doit l\'être.',
+      formule: 'E = 30 J   ·   soins suivants × 0,7',
+      params: [],
+      appliquer(e, p, ctx) {
+        if (!['contact', 'creature'].includes(e.ancre) && ancrageDe(e.ancre).zone !== 'tenu') ctx.alerte('attention', 'Pour sonder un corps, il faut le toucher : ancre le sort « Sur une cible touchée ».');
+        e.diag = true;
+        ctx.energie(30);
+        ctx.mental(0.6);
+      },
+    },
+    anesthesier: {
+      fam: 'vie', nom: 'Anesthésier', ecole: 'Biomancie', nature: 'inspire', couleur: '#7fd39b',
+      description: 'Endort les nerfs du patient. Indispensable avant de régénérer une blessure grave : sans cela, la douleur de la repousse peut le faire perdre connaissance.',
+      formule: 'mise en place = 200 J   ·   entretien = 20 W',
+      params: [],
+      appliquer(e, p, ctx) {
+        e.anesthesie = true;
+        e.entretiens.anesthesie = 20;
+        ctx.energie(200);
+        ctx.mental(0.3);
+      },
+    },
+    regenerer: {
+      fam: 'vie', nom: 'Régénérer les tissus', ecole: 'Biomancie', nature: 'mixte', couleur: '#7fd39b',
+      description: 'Reconstruit la chair, les os et les vaisseaux cellule par cellule, au rythme choisi. Coût calqué sur la biosynthèse ; un cinquième de l\'énergie part en chaleur dans le corps : trop rapide, et le patient brûle de fièvre. Les grandes blessures prennent donc du temps.',
+      formule: 'E = 25 kJ/g (× 0,7 si diagnostiqué)   ·   durée = masse / rythme   ·   fièvre = 20 % · E / durée',
+      params: [
+        { id: 'blessure', label: 'Blessure', type: 'select', def: '20', options: { '0.1': 'Égratignure (0,1 g)', '2': 'Coupure (2 g)', '20': 'Plaie profonde (20 g)', '150': 'Fracture (150 g)', '500': 'Organe touché (500 g)', '4000': 'Membre perdu (4 kg)' } },
+        { id: 'rythme', label: 'Rythme', unite: 'g/s', def: 0.05, min: 0.001, step: 0.01 },
+      ],
+      appliquer(e, p, ctx) {
+        const g = Number(p.blessure);
+        const E = g * 25000 * (e.diag ? 0.7 : 1);
+        const t = g / p.rythme;
+        const P = (0.2 * E) / t; // 20 % de l'énergie du soin part en chaleur dans le corps
+        if (!['contact', 'creature'].includes(e.ancre) && ancrageDe(e.ancre).zone !== 'tenu') ctx.alerte('attention', 'La régénération se fait au contact : ancre le sort « Sur une cible touchée ».');
+        if (g >= 150 && !e.anesthesie) ctx.alerte('danger', 'Sans anesthésie, la douleur de la repousse d\'une blessure aussi grave fait perdre connaissance au patient (et peut l\'achever). Ajoute « Anesthésier » avant.');
+        if (P > 1500) ctx.alerte('danger', `Rythme trop rapide : ${M.formatNombre(P / 1000, 1)} kW de chaleur métabolique, le patient brûle de fièvre. Ralentis à ~${M.formatNombre(300 / (0.2 * 25000 * (e.diag ? 0.7 : 1)), 2)} g/s pour éviter la fièvre.`);
+        else if (P > 300) ctx.alerte('attention', `Le patient a une forte fièvre pendant le soin (${M.formatNombre(P, 0)} W de chaleur dégagée).`);
+        ctx.energie(E);
+        ctx.evoluer(t);
+        e.soin += g;
+        ctx.alerte('info', `${M.formatNombre(g, g < 1 ? 1 : 0)} g de tissus reconstruits en ${t < 60 ? M.formatNombre(t, 1) + ' s' : M.formatNombre(t / 60, 1) + ' min'}.`);
+      },
+    },
+    purger: {
+      fam: 'vie', nom: 'Purger un poison', ecole: 'Biomancie', nature: 'inspire', couleur: '#7fd39b',
+      description: 'Isole les molécules étrangères dans le sang du patient et les décompose. Plus la toxine est puissante, plus elle s\'accroche aux tissus.',
+      formule: 'E selon la toxine (× 0,7 si diagnostiqué)',
+      params: [{ id: 'toxine', label: 'Toxine', type: 'select', def: '20000', options: { '2000': 'Ivresse, nausée', '20000': 'Venin de serpent', '100000': 'Poison mortel', '500000': 'Malédiction alchimique' } }],
+      appliquer(e, p, ctx) {
+        if (!e.diag) ctx.alerte('attention', 'Sans diagnostic, tu ne sais pas où la toxine s\'est logée : le soin peut en laisser une partie.');
+        ctx.energie(Number(p.toxine) * (e.diag ? 0.7 : 1));
+        ctx.mental(1);
+        e.purge = true;
+      },
+    },
+    psyche: {
+      fam: 'vie', nom: 'Toucher l\'esprit', ecole: 'Psychomancie', nature: 'inspire', couleur: '#e48fc0',
+      description: 'Agit sur l\'esprit d\'une créature : apaiser, effrayer, suggérer, dominer. L\'esprit résiste : l\'effet coûte d\'autant plus qu\'il est fort et long. La cible doit être visée ou touchée.',
+      formule: 'E = intensité · durée',
+      params: [
+        { id: 'intensite', label: 'Effet', type: 'select', def: '50', options: { '10': 'Apaiser (10 W)', '30': 'Effrayer (30 W)', '50': 'Suggérer une idée (50 W)', '500': 'Illusion mentale (500 W)', '5000': 'Dominer (5 kW)' } },
+        { id: 'duree', label: 'Durée de l\'effet', unite: 's', def: 60, min: 1 },
+      ],
+      appliquer(e, p, ctx) {
+        if (!['contact', 'creature'].includes(e.ancre)) ctx.alerte('attention', 'Un esprit se touche directement : ancre le sort « Sur une créature visée » ou « Sur une cible touchée ».');
+        ctx.energie(Number(p.intensite) * p.duree);
+        ctx.mental(0.4);
+        e.psyche = Number(p.intensite);
+        if (Number(p.intensite) >= 5000) ctx.alerte('info', 'Une domination se ressent : la cible saura qu\'on a forcé son esprit quand l\'effet cessera.');
+      },
+    },
+    bouclierMental: {
+      fam: 'protection', nom: 'Rempart mental', ecole: 'Abjuration', nature: 'inspire', couleur: '#6fa8e8',
+      description: 'Ferme l\'esprit du lanceur aux intrusions (suggestion, domination, lecture des pensées) tant qu\'il le maintient.',
+      formule: 'mise en place = 100 J   ·   entretien = 25 W',
+      params: [],
+      appliquer(e, p, ctx) {
+        e.rempart = true;
+        e.entretiens.rempart = 25;
+        ctx.energie(100, { sansDistance: true });
+        ctx.mental(0.3);
+      },
+    },
   };
 
   // Paramètres effectifs d'un bloc (y compris les sous-paramètres d'un effet direct)
@@ -653,7 +837,7 @@ const Blueprint = (() => {
   }
 
   // Entretiens liés au lanceur (s'arrêtent au lancement) / liés au sort (continuent en vol)
-  const ENTRETIENS_LANCEUR = ['protection', 'protElec', 'bouclier', 'levitation'];
+  const ENTRETIENS_LANCEUR = ['protection', 'protElec', 'bouclier', 'levitation', 'rempart', 'perception'];
 
   // --- Simulation ----------------------------------------------------------
   function simuler(sort, R = M.reglages()) {
@@ -662,6 +846,7 @@ const Blueprint = (() => {
       confine: false, protection: 0, protElec: 0, bouclier: 0, lance: false, v: 0, distanceVol: 0, libere: false,
       forme: 'sphere', fragments: 1, charge: 0, pression: 1, lumiere: 0,
       vise: false, guide: false, cache: false, levite: false, piege: null,
+      credit: 0, aimant: 0, silence: false, percoit: 0, diag: false, anesthesie: false, soin: 0, purge: false, psyche: 0, rempart: false,
       entretiens: {}, tempsCharge: null, livraison: null, fuite: 0,
     };
     // Courbes : température, charge électrique, isolation, puissance d'entretien, énergie cumulée
@@ -677,10 +862,12 @@ const Blueprint = (() => {
       const ctx = {
         R,
         alerte: (niv, txt) => etape.alertes.push({ niv, txt }),
-        rendre(j) { const v = Math.min(Math.max(0, j), ePonctuelle); etape.energie -= v; ePonctuelle -= v; },
+        rendre(j) { const v = Math.min(Math.max(0, j), ePonctuelle); etape.energie -= v; ePonctuelle -= v; return v; },
         energie(j, o = {}) {
           const f = o.sansDistance || e.lance ? 1 : e.facteurDistance;
-          const v = Math.max(0, j) * f;
+          let v = Math.max(0, j) * f;
+          // chaleur siphonnée en réserve : elle paie d'abord les blocs suivants
+          if (e.credit > 0) { const u = Math.min(e.credit, v); e.credit -= u; v -= u; }
           etape.energie += v; ePonctuelle += v;
         },
         pertes() {
@@ -778,6 +965,7 @@ const Blueprint = (() => {
         protection: e.protection, protElec: e.protElec, bouclier: e.bouclier, lance: e.lance, libere: e.libere, v: e.v,
         forme: e.forme, fragments: e.fragments, charge: e.charge, pression: e.pression,
         vise: e.vise, guide: e.guide, cache: e.cache, lumiere: e.lumiere, levite: e.levite, piege: e.piege,
+        credit: e.credit, aimant: e.aimant, silence: e.silence, percoit: e.percoit, diag: e.diag, anesthesie: e.anesthesie, soin: e.soin, purge: e.purge, psyche: e.psyche, rempart: e.rempart,
       };
       etapes.push(etape);
     }
@@ -786,6 +974,7 @@ const Blueprint = (() => {
     if (!e.libere && ((e.matiere && Math.abs(e.T - AMBIANTE) > 50) || e.charge > 0))
       globales.push({ niv: 'info', txt: 'Le sort n\'est jamais libéré : son énergie se dissipe sans effet. Termine par « Libération ».' });
 
+    if (e.credit > 100) globales.push({ niv: 'info', txt: `${M.formatEnergie(e.credit)} de chaleur siphonnée n'ont servi à rien et se dissipent : ajoute des blocs après le siphon pour en profiter.` });
     const focal = M.FOCALISATEUR[sort.lanceur?.focalisateur]?.f ?? 1;
     const eTotal = (ePonctuelle + eEntretien) * focal;
     const c = cout(eTotal, sort.lanceur, R);
@@ -829,7 +1018,7 @@ const Blueprint = (() => {
     return base;
   }
 
-  return { AMBIANTE, TOLERANCE, ANCRAGES, LIBERATIONS, FAMILLES, FORMES, TRANSITIONS, COMBUSTIBLES, BLOCS, parametres, valeurs, nouveauBloc, simuler, cout, normaliser };
+  return { AMBIANTE, DENSITES, CONDUCTEURS, TOLERANCE, ANCRAGES, LIBERATIONS, FAMILLES, FORMES, TRANSITIONS, COMBUSTIBLES, BLOCS, parametres, valeurs, nouveauBloc, simuler, cout, normaliser };
 })();
 
 /* --- Blueprints d'exemple -------------------------------------------------- */
@@ -961,6 +1150,140 @@ const EXEMPLES = [
       { type: 'effet', params: { effet: 'foudre', tension: 100000, intensite: 30, duree: 0.01 } },
     ],
     lanceur: { niveau: 'maitre', reserve: null, focalisateur: 'ouvrage' },
+  },
+  {
+    id: 'ex-lame-ardente', nom: 'Lame ardente', ecole: 'Pyromancie',
+    description: 'Le bretteur fait rougir sa propre épée sans lâcher la garde : la lame, chauffée à 600 °C, entaille et cautérise à la fois.',
+    blocs: [
+      { type: 'ancrage', params: { lieu: 'objet' } },
+      { type: 'rassembler', params: { matiere: 'fer', masse: 1.2 } },
+      { type: 'protection', params: { seuil: '1000' } },
+      { type: 'chaleur', params: { puissance: 40, cible: 600 } },
+      { type: 'liberation', params: { mode: 'impregnation' } },
+    ],
+    lanceur: { niveau: 'adepte', reserve: null, focalisateur: 'aucun' },
+  },
+  {
+    id: 'ex-mur-flammes', nom: 'Mur de flammes', ecole: 'Pyromancie',
+    description: 'Une nappe d\'huile tirée des réserves du camp s\'étale en travers du passage à huit pas, s\'embrase et brûle vingt secondes.',
+    blocs: [
+      { type: 'ancrage', params: { lieu: 'distance', distance: 8 } },
+      { type: 'rassembler', params: { matiere: 'huile', masse: 0.5 } },
+      { type: 'faconner', params: { forme: 'mur' } },
+      { type: 'chaleur', params: { puissance: 60, cible: 260 } },
+      { type: 'embraser', params: { fraction: 25, duree: 1 } },
+      { type: 'liberation', params: { mode: 'brasier', duree: 20 } },
+    ],
+    lanceur: { niveau: 'maitre', reserve: null, focalisateur: 'simple' },
+  },
+  {
+    id: 'ex-jet-vapeur', nom: 'Jet de vapeur', ecole: 'Hydromancie',
+    description: 'Un demi-litre d\'eau porté à ébullition dans une bulle, vaporisé et comprimé, projeté à six pas puis relâché en un souffle brûlant vers l\'avant.',
+    blocs: [
+      { type: 'ancrage', params: { lieu: 'devant' } },
+      { type: 'protection', params: { seuil: '500' } },
+      { type: 'rassembler', params: { matiere: 'eau', masse: 0.5 } },
+      { type: 'confinement', params: {} },
+      { type: 'chaleur', params: { puissance: 80, cible: 100 } },
+      { type: 'etat', params: { transition: 'vaporiser', puissance: 150 } },
+      { type: 'compresser', params: { ratio: 5 } },
+      { type: 'mouvement', params: { vitesse: 20, distance: 6 } },
+      { type: 'liberation', params: { mode: 'cone' } },
+    ],
+    lanceur: { niveau: 'maitre', reserve: null, focalisateur: 'aucun' },
+  },
+  {
+    id: 'ex-carreau-aimante', nom: 'Carreau aimanté', ecole: 'Électromancie',
+    description: 'Une pointe de fer forgée d\'un geste, aimantée puis tirée à cent mètres par seconde : elle file d\'elle-même vers la plaque d\'armure la plus proche.',
+    blocs: [
+      { type: 'ancrage', params: { lieu: 'main' } },
+      { type: 'rassembler', params: { matiere: 'fer', masse: 0.05 } },
+      { type: 'faconner', params: { forme: 'lance' } },
+      { type: 'magnetiser', params: { champ: '0.5' } },
+      { type: 'mouvement', params: { vitesse: 100, distance: 50 } },
+      { type: 'liberation', params: { mode: 'perforation' } },
+    ],
+    lanceur: { niveau: 'adepte', reserve: null, focalisateur: 'aucun' },
+  },
+  {
+    id: 'ex-javelot-cuivre', nom: 'Javelot conducteur', ecole: 'Électromancie',
+    description: 'Une lance de cuivre chargée dans la main isolée du lanceur : à l\'impact, l\'arc saute sur trois ennemis proches.',
+    blocs: [
+      { type: 'ancrage', params: { lieu: 'main' } },
+      { type: 'protelec', params: { seuil: '100000' } },
+      { type: 'rassembler', params: { matiere: 'cuivre', masse: 0.3 } },
+      { type: 'faconner', params: { forme: 'lance' } },
+      { type: 'charger', params: { charge: 80 } },
+      { type: 'viser', params: {} },
+      { type: 'mouvement', params: { vitesse: 50, distance: 25 } },
+      { type: 'liberation', params: { mode: 'arc', cibles: 3 } },
+    ],
+    lanceur: { niveau: 'maitre', reserve: null, focalisateur: 'ouvrage' },
+  },
+  {
+    id: 'ex-greles-etang', nom: 'Grêle de l\'étang', ecole: 'Cryomancie',
+    description: 'Le cryomancien aspire la chaleur de cinq litres d\'eau d\'un étang — ce qui paie une partie du sort —, les gèle, les brise en éclats et les projette.',
+    blocs: [
+      { type: 'ancrage', params: { lieu: 'devant' } },
+      { type: 'rassembler', params: { matiere: 'eau', masse: 5 } },
+      { type: 'siphon', params: { puissance: 20, cible: 0 } },
+      { type: 'etat', params: { transition: 'solidifier', puissance: 40 } },
+      { type: 'fragmenter', params: { nombre: 12 } },
+      { type: 'mouvement', params: { vitesse: 30, distance: 20 } },
+      { type: 'liberation', params: { mode: 'explosion' } },
+    ],
+    lanceur: { niveau: 'maitre', reserve: null, focalisateur: 'simple' },
+  },
+  {
+    id: 'ex-ressouder-os', nom: 'Ressouder un os', ecole: 'Biomancie',
+    description: 'Le guérisseur sonde la fracture, endort le blessé puis reconstruit l\'os lentement, pour ne pas lui donner la fièvre. Une demi-heure de travail.',
+    blocs: [
+      { type: 'ancrage', params: { lieu: 'contact' } },
+      { type: 'diagnostiquer', params: {} },
+      { type: 'anesthesier', params: {} },
+      { type: 'regenerer', params: { blessure: '150', rythme: 0.08 } },
+    ],
+    lanceur: { niveau: 'maitre', reserve: null, focalisateur: 'aucun' },
+  },
+  {
+    id: 'ex-antidote', nom: 'Purge du venin', ecole: 'Biomancie',
+    description: 'Une main sur la morsure : le guérisseur trouve le venin dans le sang et le décompose avant qu\'il n\'atteigne le cœur.',
+    blocs: [
+      { type: 'ancrage', params: { lieu: 'contact' } },
+      { type: 'diagnostiquer', params: {} },
+      { type: 'purger', params: { toxine: '20000' } },
+    ],
+    lanceur: { niveau: 'adepte', reserve: null, focalisateur: 'aucun' },
+  },
+  {
+    id: 'ex-murmure', nom: 'Murmure insidieux', ecole: 'Psychomancie',
+    description: 'Une idée glissée sans un bruit dans l\'esprit d\'un garde, à douze pas : « tu as entendu quelque chose derrière toi ».',
+    blocs: [
+      { type: 'ancrage', params: { lieu: 'creature', distance: 12 } },
+      { type: 'silence', params: {} },
+      { type: 'psyche', params: { intensite: '50', duree: 30 } },
+    ],
+    lanceur: { niveau: 'adepte', reserve: null, focalisateur: 'aucun' },
+  },
+  {
+    id: 'ex-brise-trame', nom: 'Brise-trame', ecole: 'Abjuration',
+    description: 'L\'abjurateur repère la rune piégée d\'un rival, puis en défait la trame à distance avant qu\'elle ne se déclenche.',
+    blocs: [
+      { type: 'ancrage', params: { lieu: 'distance', distance: 6 } },
+      { type: 'percevoir', params: { rayon: 10 } },
+      { type: 'dissiper', params: { cercle: '100000' } },
+    ],
+    lanceur: { niveau: 'maitre', reserve: null, focalisateur: 'simple' },
+  },
+  {
+    id: 'ex-esprit-forteresse', nom: 'Esprit-forteresse', ecole: 'Abjuration',
+    description: 'Avant d\'entrer dans la salle du nécromant, le mage ferme son esprit et maintient le rempart pendant cinq minutes.',
+    blocs: [
+      { type: 'ancrage', params: { lieu: 'corps' } },
+      { type: 'bouclierMental', params: {} },
+      { type: 'attendre', params: { duree: 300, maintenir: 'non' } },
+    ],
+    lanceur: { niveau: 'novice', reserve: null, focalisateur: 'aucun' },
   },
 ];
 
