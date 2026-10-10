@@ -23,6 +23,12 @@ const Matrice = (() => {
     charbon:{ nom: 'Charbon',        c: 710 },
     cuivre: { nom: 'Cuivre',         c: 385 },
     sable:  { nom: 'Sable',          c: 830 },
+    methane:   { nom: 'Méthane',            c: 2220 },
+    hydrogene: { nom: 'Hydrogène',          c: 14300 },
+    ethanol:   { nom: 'Vapeur d\'alcool',  c: 1900 },
+    gazbois:   { nom: 'Gaz de bois',        c: 1300 },
+    melange:   { nom: 'Mélange inflammable', c: 1150 },
+    fumees:    { nom: 'Gaz de combustion',  c: 1250 },
   };
 
   const opts = (obj) => Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, v.nom]));

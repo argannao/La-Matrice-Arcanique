@@ -108,6 +108,60 @@ const Blueprint = (() => {
     charbon: { pci: 30e6, ignition: 400, flamme: 1400 },
     huile:   { pci: 42e6, ignition: 250, flamme: 1900 },
   };
+  // --- Combustion des gaz et brouillards --------------------------------------
+  // pci : pouvoir calorifique inférieur (J/kg) · o2 : kg d'O₂ par kg à la stœchiométrie
+  // tAir / tO2 : température adiabatique de flamme (°C), mélange stœchiométrique dans l'air / dans l'O₂ pur
+  // auto : température d'auto-inflammation (°C) · mie : énergie minimale d'allumage (mJ)
+  // rayon : part de la puissance rayonnée par une flamme de diffusion · rho : masse volumique du gaz (kg/m³)
+  // prep : coût de préparation (J/kg) · lim : richesses inflammables [min, max]
+  const GAZ = {
+    methane:   { nom: 'Méthane (gaz des marais)', pci: 50e6, o2: 4.0, tAir: 1950, tO2: 2810, auto: 580, mie: 0.28, rayon: 0.15, rho: 0.67, prep: 500, lim: [0.5, 1.7],
+                 source: 'Rassemblé là où la matière pourrit : marais, fumiers, galeries de mine.' },
+    hydrogene: { nom: 'Hydrogène (électrolyse de l\'eau)', pci: 120e6, o2: 8.0, tAir: 2110, tO2: 2800, auto: 535, mie: 0.017, rayon: 0.08, rho: 0.084, prep: 190e6, lim: [0.1, 7],
+                 source: 'Arraché à l\'eau par électrolyse : la magie paie 142 MJ/kg (rendement 75 %) pour en récupérer 120 en brûlant.' },
+    ethanol:   { nom: 'Vapeur d\'alcool', pci: 26.8e6, o2: 2.08, tAir: 1920, tO2: 2750, auto: 365, mie: 0.23, rayon: 0.15, rho: 1.9, prep: 850e3, lim: [0.5, 3],
+                 source: 'Un alcool fort vaporisé : il faut payer sa chaleur de vaporisation (≈ 0,85 MJ/kg).' },
+    huile:     { nom: 'Huile pulvérisée (brouillard)', pci: 43e6, o2: 3.4, tAir: 2030, tO2: 2900, auto: 250, mie: 0.2, rayon: 0.35, rho: 900, prep: 5e3, lim: [0.6, 3],
+                 source: 'Huile brisée en fines gouttelettes : facile à obtenir, flamme fumeuse et très rayonnante.' },
+    gazbois:   { nom: 'Gaz de bois (pyrolyse)', pci: 5e6, o2: 0.4, tAir: 1500, tO2: 2300, auto: 600, mie: 0.15, rayon: 0.2, rho: 1.1, prep: 1.5e6, lim: [0.5, 2.5],
+                 source: 'Bois chauffé sans air jusqu\'à libérer ses gaz (CO, H₂, méthane) : pauvre en énergie, mais le bois est partout.' },
+  };
+  const COMBURANTS = {
+    air:       { nom: 'Air ambiant', xO2: 0.232, sep: 0, gain: 0, txt: 'd\'air ambiant' },
+    enrichi:   { nom: 'Air enrichi (40 % d\'O₂)', xO2: 0.43, sep: 0.9e6, gain: 0.45, txt: 'd\'air enrichi en oxygène' },
+    oxygene:   { nom: 'Oxygène pur', xO2: 1, sep: 0.9e6, gain: 1, txt: 'd\'oxygène pur' },
+  };
+  const RICHESSES = { '0.8': 'Pauvre (φ 0,8 — excès d\'air)', '1': 'Stœchiométrique (φ 1)', '1.3': 'Riche (φ 1,3 — excès de combustible)' };
+  // Température de flamme d'un mélange (°C) selon le comburant et la richesse
+  function tempFlamme(gaz, comb, phi, diffusion) {
+    const g = GAZ[gaz];
+    let T = g.tAir + (g.tO2 - g.tAir) * (COMBURANTS[comb]?.gain ?? 0);
+    const ecart = phi < 1 ? (1 - phi) * 0.6 : (phi - 1) * 0.35;
+    T = AMBIANTE + (T - AMBIANTE) * Math.max(0.3, 1 - ecart);
+    if (diffusion) T = AMBIANTE + (T - AMBIANTE) * 0.75; // flamme de diffusion : mélange imparfait et pertes par rayonnement
+    return T;
+  }
+  // Couleur visible de la flamme
+  function couleurFlamme(gaz, T, premelange, phi, comb) {
+    if (gaz === 'hydrogene') return { nom: 'bleu pâle, presque invisible en plein jour', hex: '#a9c8ff', invisible: true };
+    if (premelange && phi <= 1.1) return comb === 'oxygene' ? { nom: 'bleu-blanc éblouissant', hex: '#d6e6ff' } : { nom: 'bleue (combustion complète, sans suie)', hex: '#4f8dff' };
+    if (T < 750) return { nom: 'rouge sombre', hex: '#8b1a0e' };
+    if (T < 950) return { nom: 'rouge', hex: '#c0301a' };
+    if (T < 1150) return { nom: 'orange', hex: '#f07a1a' };
+    if (T < 1350) return { nom: 'jaune-orangé', hex: '#f7a531' };
+    if (T < 1600) return { nom: 'jaune vif (suie incandescente)', hex: '#ffd34d' };
+    return { nom: 'blanc-jaune aveuglant', hex: '#fff1b8' };
+  }
+  // Ressenti du rayonnement thermique (kW/m²)
+  function ressentiRayonnement(q) {
+    if (q < 1) return 'tiède, comme le soleil';
+    if (q < 2.5) return 'chaud, supportable longtemps';
+    if (q < 5) return 'douloureux après ~30 s';
+    if (q < 10) return 'douloureux en ~10 s, cloques';
+    if (q < 20) return 'brûlures en quelques secondes';
+    return 'brûlures graves presque immédiates';
+  }
+
   const FORMES = {
     sphere: { nom: 'Sphère', pertes: 1, txt: 'une sphère' },
     lance:  { nom: 'Lance / javelot', pertes: 1.3, txt: 'une lance perforante' },
@@ -430,6 +484,157 @@ const Blueprint = (() => {
         e.matiere.masse *= 1 - frac * 0.9;
         majConfinement(e);
         ctx.alerte('info', `La combustion fournit ${M.formatEnergie(Q)} sans rien coûter au lanceur ; la flamme plafonne vers ${cb.flamme} °C.`);
+      },
+    },
+    combustible: {
+      fam: 'energie', nom: 'Préparer un combustible', ecole: 'Pyromancie', nature: 'rigoureux', couleur: '#e8904e',
+      description: 'Rassemble ou fabrique un gaz (ou un brouillard) qui brûlera vraiment : méthane, hydrogène, vapeur d\'alcool, huile pulvérisée, gaz de bois. Sans confinement, un gaz se disperse avant d\'avoir brûlé.',
+      formule: 'coût = m · coût de préparation   ·   énergie chimique = m · PCI',
+      params: [
+        { id: 'gaz', label: 'Combustible', type: 'select', def: 'methane', options: Object.fromEntries(Object.entries(GAZ).map(([k, g]) => [k, g.nom])) },
+        { id: 'masse', label: 'Masse', unite: 'g', def: 20, min: 0.1, step: 5 },
+      ],
+      appliquer(e, p, ctx) {
+        const g = GAZ[p.gaz] || GAZ.methane, kg = p.masse / 1000;
+        if (e.matiere && !GAZ[e.matiere.type]) ctx.alerte('attention', `La matière déjà présente (${nomMat(e.matiere.type).toLowerCase()}) est remplacée par le combustible.`);
+        e.matiere = { type: p.gaz, masse: kg, phase: p.gaz === 'huile' ? 'liquide' : 'gaz' };
+        e.T = AMBIANTE;
+        e.combustible = p.gaz; e.premelange = false; e.comburant = null; e.richesse = 1; e.masseO2 = 0; e.flamme = null;
+        majConfinement(e);
+        ctx.energie(kg * g.prep + 50);
+        ctx.mental(0.2 + 0.02 * p.masse / 10);
+        const vol = p.gaz === 'huile' ? null : kg / g.rho * 1000;
+        ctx.alerte('info', `${g.source} Énergie chimique contenue : ${M.formatEnergie(kg * g.pci)}${vol ? ` · ${M.formatNombre(vol, vol < 10 ? 1 : 0)} litres de gaz` : ''}.`);
+        if (p.gaz === 'hydrogene') ctx.alerte('attention', `Bilan négatif : produire cet hydrogène coûte ${M.formatEnergie(kg * g.prep)}, sa combustion n'en rendra que ${M.formatEnergie(kg * g.pci)}. On le choisit pour sa flamme, pas pour l'économie.`);
+      },
+    },
+    comburant: {
+      fam: 'energie', nom: 'Apporter l\'oxygène', ecole: 'Pyromancie', nature: 'rigoureux', couleur: '#e8904e',
+      description: 'Mélange au combustible l\'oxygène qu\'il lui faut pour brûler (prémélange). Dans l\'air, 77 % de la masse est de l\'azote inutile qu\'il faut chauffer aussi : l\'oxygène pur donne une flamme bien plus chaude, mais le séparer de l\'air coûte de l\'énergie.',
+      formule: 'O₂ = m · (O₂/kg) / φ   ·   séparation ≈ 0,9 MJ/kg d\'O₂',
+      params: [
+        { id: 'source', label: 'Comburant', type: 'select', def: 'air', options: Object.fromEntries(Object.entries(COMBURANTS).map(([k, c]) => [k, c.nom])) },
+        { id: 'richesse', label: 'Richesse du mélange', type: 'select', def: '1', options: RICHESSES },
+      ],
+      appliquer(e, p, ctx) {
+        if (!e.combustible || !e.matiere || !GAZ[e.matiere.type]) { ctx.alerte('danger', 'Il n\'y a pas de combustible à mélanger : ajoute « Préparer un combustible » avant.'); return; }
+        const g = GAZ[e.combustible], c = COMBURANTS[p.source] || COMBURANTS.air, phi = Number(p.richesse) || 1;
+        const mf = e.matiere.masse, O2 = (mf * g.o2) / phi, mc = O2 / c.xO2;
+        ctx.energie(mc * 300 + (p.source === 'air' ? 0 : c.sep * (O2 - (p.source === 'enrichi' ? mc * 0.232 : 0))));
+        ctx.mental(0.2 + 0.05 * mc);
+        e.T = (e.T * mf + AMBIANTE * mc) / (mf + mc);
+        e.matiere = { type: 'melange', masse: mf + mc, phase: 'gaz' };
+        e.masseCombustible = mf;
+        e.premelange = true; e.comburant = p.source; e.richesse = phi; e.masseO2 = O2;
+        majConfinement(e);
+        const volume = (mc / (p.source === 'oxygene' ? 1.43 : 1.2) + (g.rho < 100 ? mf / g.rho : 0)) * 1000;
+        ctx.alerte('info', `${M.formatNombre(mc * 1000, 0)} g ${c.txt} (${M.formatNombre(O2 * 1000, 0)} g d'O₂) : ${M.formatNombre(volume, 0)} litres de mélange prêt à s'embraser d'un coup.`);
+        if (!e.confine) ctx.alerte('attention', 'Un mélange gazeux non confiné se dilue dans l\'air en quelques secondes : confine-le pour le garder.');
+      },
+    },
+    allumer: {
+      fam: 'energie', nom: 'Allumer', ecole: 'Pyromancie', nature: 'rigoureux', couleur: '#e8904e',
+      description: 'Enflamme le combustible. Une étincelle de quelques millijoules suffit ; sinon il faut porter le gaz à sa température d\'auto-inflammation. Un mélange prémélangé allumé dans tout son volume brûle d\'un coup : c\'est une déflagration.',
+      formule: 'étincelle ≥ énergie minimale d\'allumage   ·   déflagration : T → T_flamme, P × T_f/T_i',
+      params: [
+        { id: 'methode', label: 'Méthode', type: 'select', def: 'etincelle', options: { etincelle: 'Étincelle', pointchaud: 'Point chaud (auto-inflammation)' } },
+        { id: 'zone', label: 'Où allumer', type: 'select', def: 'sortie', options: { sortie: 'À la sortie (flamme continue)', volume: 'Dans tout le volume (déflagration)' } },
+      ],
+      appliquer(e, p, ctx) {
+        if (!e.combustible || !e.matiere || !(GAZ[e.matiere.type] || e.matiere.type === 'melange')) { ctx.alerte('danger', 'Rien d\'inflammable ici : prépare un combustible avant d\'allumer.'); return; }
+        if (e.flamme) { ctx.alerte('attention', 'La flamme est déjà allumée.'); return; }
+        const g = GAZ[e.combustible];
+        if (p.methode === 'pointchaud' && e.T < g.auto) { ctx.alerte('danger', `Le ${e.premelange ? 'mélange' : 'combustible'} n'est qu'à ${M.formatNombre(e.T, 0)} °C : il ne s'enflamme seul qu'à ${g.auto} °C. Chauffe-le d'abord, ou utilise une étincelle.`); return; }
+        ctx.energie(p.methode === 'etincelle' ? 1 : 20);
+        ctx.mental(0.1);
+        if (p.methode === 'etincelle') ctx.alerte('info', `Une étincelle de ${M.formatNombre(g.mie, 3)} mJ suffirait à l'allumer.`);
+        let zone = p.zone;
+        if (!e.premelange && zone === 'volume') { ctx.alerte('info', 'Sans oxygène mélangé, le combustible ne peut brûler qu\'à sa surface : la flamme se forme à la sortie, au contact de l\'air.'); zone = 'sortie'; }
+        if (e.premelange && zone === 'sortie' && !e.confine) { ctx.alerte('attention', 'Sans confinement pour le doser, tout le mélange s\'embrase d\'un coup : déflagration.'); zone = 'volume'; }
+        if (zone === 'sortie') {
+          e.flamme = { type: e.premelange ? 'premelange' : 'diffusion', allumee: true };
+          ctx.alerte('info', e.premelange ? 'Une flamme prémélangée naît à la sortie du confinement, comme au bec d\'un chalumeau.' : 'Une flamme de diffusion naît là où le combustible rencontre l\'air.');
+          return;
+        }
+        // Déflagration : tout le mélange brûle en une fraction de seconde
+        const phi = e.richesse, mf = e.masseCombustible || 0, brule = mf * Math.min(1, 1 / phi);
+        const Q = brule * g.pci, M0 = e.matiere.masse, T0 = e.T;
+        const Tf = Math.min(tempFlamme(e.combustible, e.comburant, phi, false), T0 + Q / (M0 * M.MATERIAUX.fumees.c));
+        e.matiere = { type: 'fumees', masse: M0, phase: 'gaz' };
+        ctx.evoluer(0.05, (Q / 0.05), { plafond: Tf });
+        e.T = Tf;
+        if (e.confine) e.pression *= (Tf + 273.15) / (T0 + 273.15);
+        e.flamme = { type: 'deflagration', allumee: true, eteinte: true };
+        const couleur = couleurFlamme(e.combustible, Tf, true, phi, e.comburant);
+        const rayon = Math.cbrt((3 * (M0 / 1.2) * ((Tf + 273.15) / 293)) / (4 * Math.PI));
+        e.flammeInfo = { mode: 'deflagration', gaz: e.combustible, T: Tf, couleur, Q: Q / 0.05, E: Q, brule, O2: e.masseO2, duree: 0.05, rayonBoule: rayon, pression: e.pression, comburant: e.comburant, phi };
+        majConfinement(e);
+        if (phi > 1.05) ctx.alerte('info', `Mélange riche : ${M.formatNombre((1 - 1 / phi) * 100, 0)} % du combustible ne trouve pas d'oxygène et part en monoxyde de carbone et en suie.`);
+        if (e.confine) ctx.alerte('info', `Le mélange explose dans la bulle : ${M.formatNombre(Tf, 0)} °C sous ~${M.formatNombre(e.pression, 1)} atm, ${M.formatEnergie(Q)} libérés par la chimie.`);
+        else {
+          ctx.alerte('info', `Boule de feu de ${M.formatNombre(rayon * 2, 1)} m de diamètre, ${M.formatNombre(Tf, 0)} °C, ${couleur.nom}.`);
+          if (estProche(e.ancre) && !e.lance && e.protection < Tf) ctx.alerte('danger', `La boule de feu t'engloutit : ${M.formatNombre(rayon * 2, 1)} m de flammes à ${M.formatNombre(Tf, 0)} °C, nées ${ancrageDe(e.ancre).ou}. Confine le mélange et lance-le avant de l'allumer, ou protège-toi au-delà de cette température.`);
+        }
+        e.flamme.couleur = couleur;
+      },
+    },
+    flamme: {
+      fam: 'energie', nom: 'Entretenir la flamme', ecole: 'Pyromancie', nature: 'rigoureux', couleur: '#e8904e',
+      description: 'Fait brûler le combustible à un débit choisi : torche, chalumeau, lance-flammes. La chimie fournit la chaleur, le lanceur ne paie que le contrôle du jet. Hauteur de flamme (Heskestad) et rayonnement réels.',
+      formule: 'P = débit · PCI   ·   hauteur L = 0,235 · P^(2/5) − 1,02 · D   ·   rayonnement q = χ · P / (4π r²)',
+      params: [
+        { id: 'debit', label: 'Débit de combustible', unite: 'g/s', def: 0.3, min: 0.001, step: 0.1 },
+        { id: 'duree', label: 'Durée', unite: 's', def: 10, min: 0.1, step: 1 },
+      ],
+      appliquer(e, p, ctx) {
+        if (!e.flamme || !e.flamme.allumee || e.flamme.eteinte) { ctx.alerte('danger', e.flamme?.eteinte ? 'Le mélange a déjà tout brûlé d\'un coup : il n\'y a plus de flamme à entretenir.' : 'La flamme n\'est pas allumée : ajoute « Allumer » avant.'); return; }
+        const g = GAZ[e.combustible], pre = e.flamme.type === 'premelange';
+        const fuelDispo = pre ? (e.masseCombustible || 0) : (e.matiere?.masse || 0);
+        const perte = e.confine || e.combustible === 'huile' ? 0 : 0.3;
+        if (perte) ctx.alerte('attention', 'Sans confinement pour le retenir, 30 % du gaz se disperse sans brûler.');
+        const utile = fuelDispo * (1 - perte);
+        const d = p.debit / 1000;
+        let t = p.duree;
+        if (d * t > utile) { t = utile / d; ctx.alerte('attention', `Le combustible est épuisé après ${M.formatNombre(t, 1)} s : la flamme s'éteint.`); }
+        const phi = pre ? e.richesse : 1;
+        const completude = pre ? Math.min(1, 1 / phi) : 1;
+        const P = d * g.pci * completude;
+        const T = tempFlamme(e.combustible, pre ? e.comburant : 'air', phi, !pre);
+        const chi = g.rayon * (pre ? 0.4 : 1);
+        const D = ancrageDe(e.ancre).zone === 'tenu' ? 0.08 : 0.15;
+        const L = Math.max(0.02, 0.235 * (P / 1000) ** 0.4 - 1.02 * D) * (pre ? 0.5 : 1);
+        const rLanceur = { tenu: 0.5, contact: 0.5, corps: 0.3, proche: 1 }[ancrageDe(e.ancre).zone] ?? null;
+        const q = rLanceur ? (chi * P) / (4 * Math.PI * rLanceur ** 2) / 1000 : 0;
+        const couleur = couleurFlamme(e.combustible, T, pre, phi, e.comburant);
+        // la flamme elle-même : quelques grammes de gaz brûlants renouvelés en continu
+        const air = pre ? 0 : d * g.o2 / 0.232;
+        const masseFlamme = Math.max(0.002, (d + air + (pre ? d * g.o2 / phi / (COMBURANTS[e.comburant]?.xO2 || 0.232) : 0)) * 0.3);
+        const T0 = e.T, avant = { ...e.matiere }, consomme = (d * t) / (1 - perte); // combustible tiré du réservoir (brûlé + dispersé)
+        e.matiere = { type: 'fumees', masse: masseFlamme, phase: 'gaz' };
+        e.tempsCharge ??= e.t; // le sort est « lancé » dès que la flamme brûle : la durée de combustion n'est pas de l'incantation
+        e.entretiens.flamme = 30;
+        ctx.energie(100);
+        ctx.evoluer(t, P * (1 - chi), { plafond: T });
+        delete e.entretiens.flamme;
+        const E = P * t;
+        e.flammeInfo = { mode: pre ? 'premelange' : 'diffusion', gaz: e.combustible, T, couleur, Q: P, E, brule: d * t, O2: d * g.o2 * t, air: air * t, duree: t, hauteur: L, chi, q, rLanceur, comburant: pre ? e.comburant : 'air', phi };
+        e.flamme.couleur = couleur;
+        ctx.alerte('info', `Flamme ${couleur.nom} à ~${M.formatNombre(T, 0)} °C : ${M.formatNombre(P / 1000, P < 10000 ? 1 : 0)} kW, ${M.formatNombre(L, 2)} m de haut, ${M.formatEnergie(E)} dégagés en ${M.formatNombre(t, 1)} s.`);
+        if (couleur.invisible) ctx.alerte('attention', 'Flamme d\'hydrogène quasi invisible : ni toi ni tes alliés ne la voyez bien. Prudence.');
+        if (T > 1538) ctx.alerte('info', 'Assez chaude pour faire fondre l\'acier (1 538 °C) : découpe possible.');
+        if (rLanceur && q > 2.5 && e.protection < T) ctx.alerte(q > 10 ? 'danger' : 'attention', `Rayonnement sur ton visage : ${M.formatNombre(q, 1)} kW/m², ${ressentiRayonnement(q)}. Une protection thermique d'au moins ${M.formatNombre(T, 0)} °C l'arrête.`);
+        // la flamme s'éteint ; il reste dans le réservoir le combustible non brûlé (à sa température d'avant), ou rien
+        if (pre) {
+          const mf = e.masseCombustible || 0, frac = mf > 0 ? Math.min(1, consomme / mf) : 1;
+          const resteM = avant.masse * (1 - frac);
+          if (resteM > 0.0005 && frac < 0.999) { e.matiere = { type: 'melange', masse: resteM, phase: 'gaz' }; e.masseCombustible = mf - consomme; e.T = T0; }
+          else { e.flamme.eteinte = true; e.masseCombustible = 0; e.matiere = null; e.T = AMBIANTE; }
+        } else {
+          const resteF = avant.masse - consomme;
+          if (resteF > 0.0005) { e.matiere = { type: avant.type, masse: resteF, phase: avant.phase }; e.T = T0; }
+          else { e.flamme.eteinte = true; e.matiere = null; e.T = AMBIANTE; }
+        }
+        majConfinement(e);
       },
     },
     charger: {
@@ -846,7 +1051,7 @@ const Blueprint = (() => {
       confine: false, protection: 0, protElec: 0, bouclier: 0, lance: false, v: 0, distanceVol: 0, libere: false,
       forme: 'sphere', fragments: 1, charge: 0, pression: 1, lumiere: 0,
       vise: false, guide: false, cache: false, levite: false, piege: null,
-      credit: 0, aimant: 0, silence: false, percoit: 0, diag: false, anesthesie: false, soin: 0, purge: false, psyche: 0, rempart: false,
+      credit: 0, combustible: null, premelange: false, comburant: null, richesse: 1, masseO2: 0, masseCombustible: 0, flamme: null, flammeInfo: null, aimant: 0, silence: false, percoit: 0, diag: false, anesthesie: false, soin: 0, purge: false, psyche: 0, rempart: false,
       entretiens: {}, tempsCharge: null, livraison: null, fuite: 0,
     };
     // Courbes : température, charge électrique, isolation, puissance d'entretien, énergie cumulée
@@ -965,7 +1170,7 @@ const Blueprint = (() => {
         protection: e.protection, protElec: e.protElec, bouclier: e.bouclier, lance: e.lance, libere: e.libere, v: e.v,
         forme: e.forme, fragments: e.fragments, charge: e.charge, pression: e.pression,
         vise: e.vise, guide: e.guide, cache: e.cache, lumiere: e.lumiere, levite: e.levite, piege: e.piege,
-        credit: e.credit, aimant: e.aimant, silence: e.silence, percoit: e.percoit, diag: e.diag, anesthesie: e.anesthesie, soin: e.soin, purge: e.purge, psyche: e.psyche, rempart: e.rempart,
+        credit: e.credit, combustible: e.combustible, premelange: e.premelange, flamme: e.flamme ? { ...e.flamme } : null, flammeInfo: e.flammeInfo, aimant: e.aimant, silence: e.silence, percoit: e.percoit, diag: e.diag, anesthesie: e.anesthesie, soin: e.soin, purge: e.purge, psyche: e.psyche, rempart: e.rempart,
       };
       etapes.push(etape);
     }
@@ -1018,7 +1223,7 @@ const Blueprint = (() => {
     return base;
   }
 
-  return { AMBIANTE, DENSITES, CONDUCTEURS, TOLERANCE, ANCRAGES, LIBERATIONS, FAMILLES, FORMES, TRANSITIONS, COMBUSTIBLES, BLOCS, parametres, valeurs, nouveauBloc, simuler, cout, normaliser };
+  return { AMBIANTE, GAZ, COMBURANTS, tempFlamme, couleurFlamme, ressentiRayonnement, DENSITES, CONDUCTEURS, TOLERANCE, ANCRAGES, LIBERATIONS, FAMILLES, FORMES, TRANSITIONS, COMBUSTIBLES, BLOCS, parametres, valeurs, nouveauBloc, simuler, cout, normaliser };
 })();
 
 /* --- Blueprints d'exemple -------------------------------------------------- */
@@ -1036,6 +1241,74 @@ const EXEMPLES = [
       { type: 'liberation', params: { mode: 'explosion' } },
     ],
     lanceur: { niveau: 'maitre', reserve: null, focalisateur: 'simple' },
+  },
+  {
+    id: 'ex-flamme-paume', nom: 'Flamme de la paume', ecole: 'Pyromancie',
+    description: 'Une vraie flamme qui danse au creux de la main : du gaz des marais tenu dans une bulle, allumé d\'une étincelle et brûlé au compte-gouttes pendant trente secondes. Elle éclaire, réchauffe et met le feu à ce qu\'on lui présente.',
+    blocs: [
+      { type: 'ancrage', params: { lieu: 'main' } },
+      { type: 'protection', params: { seuil: '2000' } },
+      { type: 'combustible', params: { gaz: 'methane', masse: 10 } },
+      { type: 'confinement', params: {} },
+      { type: 'allumer', params: { methode: 'etincelle', zone: 'sortie' } },
+      { type: 'flamme', params: { debit: 0.3, duree: 30 } },
+    ],
+    lanceur: { niveau: 'adepte', reserve: null, focalisateur: 'aucun' },
+  },
+  {
+    id: 'ex-boule-chimique', nom: 'Boule de feu chimique', ecole: 'Pyromancie',
+    description: 'La vraie boule de feu : cent grammes de méthane mêlés à un mètre cube et demi d\'air dans une bulle, allumés d\'un coup. Le mélange explose à l\'intérieur (1 950 °C, près de 8 atmosphères) puis la bulle est projetée et rompue sur la cible. La chimie paie presque tout.',
+    blocs: [
+      { type: 'ancrage', params: { lieu: 'main' } },
+      { type: 'protection', params: { seuil: '2000' } },
+      { type: 'combustible', params: { gaz: 'methane', masse: 100 } },
+      { type: 'confinement', params: {} },
+      { type: 'comburant', params: { source: 'air', richesse: '1' } },
+      { type: 'allumer', params: { methode: 'etincelle', zone: 'volume' } },
+      { type: 'mouvement', params: { vitesse: 25, distance: 20 } },
+      { type: 'liberation', params: { mode: 'explosion' } },
+    ],
+    lanceur: { niveau: 'adepte', reserve: null, focalisateur: 'simple' },
+  },
+  {
+    id: 'ex-chalumeau', nom: 'Chalumeau d\'arcaniste', ecole: 'Pyromancie',
+    description: 'Du méthane prémélangé à de l\'oxygène pur, dosé à la sortie d\'une bulle : un dard bleu-blanc à 2 800 °C qui tranche une grille d\'acier en quelques instants.',
+    blocs: [
+      { type: 'ancrage', params: { lieu: 'doigt' } },
+      { type: 'protection', params: { seuil: '3500' } },
+      { type: 'combustible', params: { gaz: 'methane', masse: 10 } },
+      { type: 'confinement', params: {} },
+      { type: 'comburant', params: { source: 'oxygene', richesse: '1' } },
+      { type: 'allumer', params: { methode: 'etincelle', zone: 'sortie' } },
+      { type: 'flamme', params: { debit: 0.2, duree: 20 } },
+    ],
+    lanceur: { niveau: 'maitre', reserve: null, focalisateur: 'aucun' },
+  },
+  {
+    id: 'ex-souffle-dragon', nom: 'Souffle du dragon', ecole: 'Pyromancie',
+    description: 'Deux cents grammes d\'huile pulvérisée en brouillard et soufflés en jet : quatre mètres et demi de flammes jaunes et fumeuses pendant cinq secondes. Le rayonnement seul brûlerait le lanceur sans sa protection.',
+    blocs: [
+      { type: 'ancrage', params: { lieu: 'devant' } },
+      { type: 'protection', params: { seuil: '2000' } },
+      { type: 'combustible', params: { gaz: 'huile', masse: 200 } },
+      { type: 'confinement', params: {} },
+      { type: 'allumer', params: { methode: 'etincelle', zone: 'sortie' } },
+      { type: 'flamme', params: { debit: 40, duree: 5 } },
+    ],
+    lanceur: { niveau: 'adepte', reserve: null, focalisateur: 'simple' },
+  },
+  {
+    id: 'ex-flamme-fantome', nom: 'Flamme fantôme', ecole: 'Pyromancie',
+    description: 'Deux grammes d\'hydrogène arrachés à l\'eau et brûlés lentement : une flamme presque invisible en plein jour, qui fait fondre l\'acier sans qu\'on la voie. Ruineuse à produire, redoutable en embuscade.',
+    blocs: [
+      { type: 'ancrage', params: { lieu: 'objet' } },
+      { type: 'protection', params: { seuil: '2000' } },
+      { type: 'combustible', params: { gaz: 'hydrogene', masse: 2 } },
+      { type: 'confinement', params: {} },
+      { type: 'allumer', params: { methode: 'etincelle', zone: 'sortie' } },
+      { type: 'flamme', params: { debit: 0.05, duree: 20 } },
+    ],
+    lanceur: { niveau: 'maitre', reserve: null, focalisateur: 'aucun' },
   },
   {
     id: 'ex-flamme-nue', nom: 'Flamme nue (erreur de novice)', ecole: 'Pyromancie',

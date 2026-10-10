@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/style.css?v=12">
+  <link rel="stylesheet" href="assets/style.css?v=13">
   <style>
     .sommaire { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 1.5rem 0; }
     .sommaire a { font-size: 0.85rem; text-decoration: none; padding: 0.3rem 0.65rem; border: 1px solid var(--ligne); border-radius: 99px; color: var(--texte-doux); }
@@ -19,6 +19,11 @@
     .legende { display: flex; flex-wrap: wrap; gap: 1rem; font-size: 0.85rem; color: var(--texte-doux); margin-bottom: 0.8rem; }
     .bloc-nom { display: inline-block; border-left: 3px solid var(--c); padding-left: 0.45rem; font-weight: 600; }
     section { scroll-margin-top: 5rem; }
+    .couleurs { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.5rem; }
+    .couleur { background: var(--surface); border: 1px solid var(--ligne); border-radius: 9px; padding: 0.6rem; display: flex; flex-direction: column; gap: 0.2rem; }
+    .couleur span { width: 100%; height: 1.4rem; border-radius: 5px; margin-bottom: 0.3rem; }
+    .couleur b { font-size: 0.85rem; font-weight: 600; }
+    .couleur small { font-size: 0.75rem; color: var(--texte-doux); }
     .regle { background: var(--surface); border: 1px solid var(--ligne); border-radius: var(--rayon); padding: 1rem 1.2rem; margin: 0.8rem 0; }
     .regle h3 { color: var(--laiton); }
     .regle p { margin: 0.3rem 0 0; color: var(--texte-doux); }
@@ -37,6 +42,7 @@
       <a href="#liberations">Les libérations</a>
       <a href="#blocs">Les blocs</a>
       <a href="#thermique">Chaleur, états, combustion</a>
+      <a href="#flammes">Les vraies flammes</a>
       <a href="#dangers">Dangers</a>
       <a href="#effets">Effets directs</a>
       <a href="#ether">Lanceur, Éther et cercles</a>
@@ -126,6 +132,36 @@
       </table></div>
     </section>
 
+    <section id="flammes">
+      <h2>Les vraies flammes</h2>
+      <p>Chauffer de l'air donne un gaz brûlant, pas une flamme. Une flamme, c'est une <strong>réaction chimique</strong> : un combustible qui s'oxyde au contact de l'oxygène et libère son énergie chimique. La Matrice la construit en quatre blocs, et c'est la chimie, pas le lanceur, qui paie la chaleur.</p>
+      <div class="etape"><span class="n">1</span><div><h3>Préparer un combustible</h3><p>Méthane, hydrogène, vapeur d'alcool, huile pulvérisée ou gaz de bois. Chacun a son pouvoir calorifique, sa température d'auto-inflammation et sa couleur. Sans confinement, un gaz se disperse.</p></div></div>
+      <div class="etape"><span class="n">2</span><div><h3>Apporter l'oxygène (facultatif)</h3><p>Prémélanger donne une flamme bleue et plus chaude. Avec de l'oxygène pur, plus d'azote à chauffer : jusqu'à ~2 800 °C. Sans ce bloc, la flamme puise l'air autour d'elle (flamme de diffusion, jaune et fumeuse).</p></div></div>
+      <div class="etape"><span class="n">3</span><div><h3>Allumer</h3><p>Une étincelle de quelques millijoules suffit, ou un point chaud au-delà de la température d'auto-inflammation. Allumé <em>à la sortie</em>, le combustible brûle en continu ; allumé <em>dans tout le volume</em>, un prémélange brûle d'un coup : boule de feu, ou explosion à l'intérieur d'une bulle confinée.</p></div></div>
+      <div class="etape"><span class="n">4</span><div><h3>Entretenir la flamme</h3><p>Le débit fixe la puissance : un gramme de méthane par seconde, c'est 50 kW. La hauteur de la flamme et la chaleur rayonnée vers le lanceur en découlent.</p></div></div>
+      <div class="formule">P = débit · PCI   ·   O₂ nécessaire = m · (O₂/kg) / φ</div>
+      <div class="formule">Hauteur (Heskestad) : L = 0,235 · P[kW]^(2/5) − 1,02 · D</div>
+      <div class="formule">Rayonnement reçu à r mètres : q = χ · P / (4π r²)</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Combustible</th><th>PCI</th><th>O₂ / kg</th><th>Flamme air · O₂ pur</th><th>Auto-inflammation</th><th>Étincelle min.</th><th>Rayonné</th><th>Préparation</th></tr></thead>
+        <tbody id="t-gaz"></tbody>
+      </table></div>
+      <h3 style="margin-top:1.4rem">Couleur des flammes</h3>
+      <p>Une flamme prémélangée brûle tout son carbone : elle est <strong>bleue</strong>. Une flamme de diffusion (ou trop riche) contient de la suie qui rougeoie : sa couleur dépend alors de sa température. L'hydrogène, sans carbone, brûle d'un bleu pâle presque invisible.</p>
+      <div class="couleurs" id="t-couleurs"></div>
+      <h3 style="margin-top:1.4rem">Repères de rayonnement</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Flux reçu</th><th>Effet sur la peau</th></tr></thead>
+        <tbody>
+          <tr><td class="num">1 kW/m²</td><td>Comme le soleil d'été</td></tr>
+          <tr><td class="num">2,5 kW/m²</td><td>Douloureux après une trentaine de secondes</td></tr>
+          <tr><td class="num">5 kW/m²</td><td>Douleur en ~10 s, cloques</td></tr>
+          <tr><td class="num">12,5 kW/m²</td><td>Le bois s'enflamme au contact d'une flamme</td></tr>
+          <tr><td class="num">&gt; 20 kW/m²</td><td>Brûlures graves presque immédiates</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
     <section id="dangers">
       <h2>Dangers détectés</h2>
       <div class="table-wrap"><table>
@@ -201,9 +237,9 @@
     </section>
   </main>
 
-  <script src="assets/matrice.js?v=12"></script>
-  <script src="assets/blueprint.js?v=12"></script>
-  <script src="assets/commun.js?v=12"></script>
+  <script src="assets/matrice.js?v=13"></script>
+  <script src="assets/blueprint.js?v=13"></script>
+  <script src="assets/commun.js?v=13"></script>
   <script>
   (() => {
     const M = Matrice, B = Blueprint, R = M.reglages(), $ = (id) => document.getElementById(id);
@@ -226,6 +262,16 @@
     $('t-combustibles').innerHTML = Object.entries(B.COMBUSTIBLES).map(([k, c]) => ligne([
       M.MATERIAUX[k]?.nom || k, { t: M.formatEnergie(c.pci) + '/kg', num: true }, { t: c.ignition + ' °C', num: true }, { t: c.flamme + ' °C', num: true },
     ])).join('');
+    $('t-gaz').innerHTML = Object.values(B.GAZ).map((g) => ligne([
+      g.nom, { t: M.formatNombre(g.pci / 1e6, 1) + ' MJ/kg', num: true }, { t: M.formatNombre(g.o2, 2) + ' kg', num: true },
+      { t: `${M.formatNombre(g.tAir, 0)} · ${M.formatNombre(g.tO2, 0)} °C`, num: true }, { t: g.auto + ' °C', num: true },
+      { t: M.formatNombre(g.mie, 3) + ' mJ', num: true }, { t: Math.round(g.rayon * 100) + ' %', num: true }, { t: M.formatEnergie(g.prep) + '/kg', num: true },
+    ])).join('');
+    $('t-couleurs').innerHTML = [[700, 'diffusion'], [900, 'diffusion'], [1100, 'diffusion'], [1300, 'diffusion'], [1500, 'diffusion'], [1800, 'diffusion'], [1950, 'bleue'], [2800, 'oxy'], [2100, 'h2']].map(([T, k]) => {
+      const c = k === 'h2' ? B.couleurFlamme('hydrogene', T, false, 1, 'air') : k === 'bleue' ? B.couleurFlamme('methane', T, true, 1, 'air') : k === 'oxy' ? B.couleurFlamme('methane', T, true, 1, 'oxygene') : B.couleurFlamme('methane', T, false, 1, 'air');
+      const lbl = k === 'h2' ? 'hydrogène' : k === 'bleue' ? 'prémélange air' : k === 'oxy' ? 'prémélange O₂' : `${T} °C`;
+      return `<div class="couleur"><span style="background:${c.hex};box-shadow:0 0 14px ${c.hex}${k === 'h2' ? ';opacity:.45' : ''}"></span><b>${echapper(lbl)}</b><small>${echapper(c.nom)}</small></div>`;
+    }).join('');
     $('t-ancrages').innerHTML = Object.values(B.ANCRAGES).map((a) => ligne([
       a.nom,
       { t: a.tol ? `${M.formatNombre(a.tol.bas)} à ${M.formatNombre(a.tol.haut)} °C` : 'hors d\'atteinte', num: true },
@@ -258,6 +304,6 @@
     $('t-echelle').innerHTML = M.ECHELLE.map((x) => ligne([{ t: M.formatEnergie(x.e), num: true }, x.txt.charAt(0).toUpperCase() + x.txt.slice(1)])).join('');
   })();
   </script>
-  <script type="module" src="assets/compte.js?v=12"></script>
+  <script type="module" src="assets/compte.js?v=13"></script>
 </body>
 </html>

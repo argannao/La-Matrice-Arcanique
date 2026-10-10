@@ -26,6 +26,11 @@ const Choix = (() => {
     'protection.seuil': '🛡️', 'protelec.seuil': '⚡',
     'bouclier.capacite': BOU, 'protection.capacite': BOU,
     'soin.blessure': { '0.1': '🩹', '2': '🩹', '20': '🩸', '150': '🦴', '500': '🫀', '4000': '🦾' },
+    'combustible.gaz': { methane: '🫧', hydrogene: '💠', ethanol: '🍶', huile: '🛢️', gazbois: '🪵' },
+    'comburant.source': { air: '💨', enrichi: '🌬️', oxygene: '🅾️' },
+    'comburant.richesse': { '0.8': '➖', '1': '⚖️', '1.3': '➕' },
+    'allumer.methode': { etincelle: '⚡', pointchaud: '🔥' },
+    'allumer.zone': { sortie: '🕯️', volume: '💥' },
     'magnetiser.champ': '🧲',
     'dissiper.cercle': { '1000': '✖️', '100000': '❎', '10000000': '⛔', '1000000000': '🚫' },
     'regenerer.blessure': { '0.1': '🩹', '2': '🩹', '20': '🩸', '150': '🦴', '500': '🫀', '4000': '🦾' },
@@ -62,6 +67,19 @@ const Choix = (() => {
       if (B.COMBUSTIBLES?.[k]) tags.push('combustible');
       const tr = B.TRANSITIONS?.[['eau', 'glace', 'vapeur'].includes(k) ? 'eau' : k];
       if (tr?.fusion) tags.push(`fond à ${nb(tr.fusion.T, 0)} °C`);
+    } else if (cle === 'combustible.gaz') {
+      const g = B.GAZ?.[k];
+      if (g) { tags.push(`PCI ${nb(g.pci / 1e6, 1)} MJ/kg`, `flamme ${nb(g.tAir, 0)} °C dans l'air`, `${nb(g.tO2, 0)} °C à l'O₂`); note = g.source; }
+    } else if (cle === 'comburant.source') {
+      const c = B.COMBURANTS?.[k];
+      if (c) { tags.push(`${Math.round(c.xO2 * 100)} % d'O₂ en masse`, c.sep ? 'séparation ≈ 0,9 MJ/kg d\'O₂' : 'gratuit'); }
+      note = { air: 'L\'azote (77 % de la masse) absorbe une grande partie de la chaleur : flamme moins chaude.', enrichi: 'Compromis : flamme nettement plus chaude, coût modéré.', oxygene: 'Aucun azote à chauffer : la flamme la plus chaude possible (~2 800 °C).' }[k] || '';
+    } else if (cle === 'comburant.richesse') {
+      note = { '0.8': 'Excès d\'air : combustion complète mais un peu moins chaude.', '1': 'Juste ce qu\'il faut d\'oxygène : la flamme la plus chaude.', '1.3': 'Excès de combustible : flamme jaune, suie et monoxyde de carbone ; une part ne brûle pas.' }[k] || '';
+    } else if (cle === 'allumer.zone') {
+      note = { sortie: 'La flamme naît à la sortie du confinement et brûle au débit choisi (bloc « Entretenir la flamme »).', volume: 'Tout le mélange brûle d\'un coup : boule de feu, ou explosion dans la bulle si elle est confinée.' }[k] || '';
+    } else if (cle === 'allumer.methode') {
+      note = { etincelle: 'Quelques millijoules suffisent : la méthode la plus sûre.', pointchaud: 'Il faut d\'abord chauffer le gaz à sa température d\'auto-inflammation.' }[k] || '';
     } else if (cle === 'faconner.forme') {
       const f = B.FORMES?.[k];
       if (f) tags.push(`pertes de chaleur ×${nb(f.pertes, 1)}`);

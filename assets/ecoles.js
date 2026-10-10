@@ -7,11 +7,11 @@ const ECOLES = [
   {
     id: 'pyromancie', nom: 'Pyromancie', icone: '🔥', couleur: '#e8904e',
     devise: 'Tout brûle, à condition d\'y mettre le prix.',
-    description: 'L\'art de verser de la chaleur dans la matière. Le pyromancien ne crée pas le feu : il chauffe un air, une huile ou un bois jusqu\'à ce qu\'il rayonne ou s\'embrase. C\'est l\'école la plus directe et la plus dangereuse pour son propre praticien.',
-    principe: 'Capacité thermique (m · c · ΔT), pertes vers l\'air ambiant, température d\'ignition et pouvoir calorifique des combustibles.',
-    forces: ['Dégâts de zone puissants', 'La combustion fournit une énergie gratuite', 'Effets durables (brasier)'],
+    description: 'L\'art du feu. Le novice chauffe de l\'air à la force du poignet ; le maître fait travailler la chimie : il prépare un combustible, le mêle à l\'oxygène, l\'allume d\'une étincelle et laisse la réaction payer la chaleur. C\'est l\'école la plus directe et la plus dangereuse pour son propre praticien.',
+    principe: 'Capacité thermique (m · c · ΔT), combustion réelle : pouvoir calorifique, oxygène nécessaire, températures adiabatiques de flamme, hauteur et rayonnement des flammes.',
+    forces: ['Dégâts de zone puissants', 'La combustion fournit une énergie gratuite : une boule de feu chimique coûte peu', 'Torches, chalumeaux, lance-flammes, brasiers'],
     limites: ['Se brûler sans protection', 'La chaleur fuit pendant la charge', 'Un gaz brûlant se disperse en vol sans confinement'],
-    conseil: 'Protège-toi avant de chauffer, confine avant de lancer, et préfère un combustible à un air chauffé à la force du poignet.',
+    conseil: 'Protège-toi avant d\'allumer, confine ton gaz, et laisse la chimie payer : un gramme de méthane vaut 50 kJ.',
   },
   {
     id: 'cryomancie', nom: 'Cryomancie', icone: '❄️', couleur: '#8fc4f5',

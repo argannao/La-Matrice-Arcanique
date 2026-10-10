@@ -232,6 +232,9 @@
       if (s.cache && !s.libere) puces.push('<span class="puce ok">invisible</span>');
       if (s.lumiere && !s.libere) puces.push(`<span class="puce">lumineux</span>`);
       if (s.piege && !s.libere) puces.push('<span class="puce">en attente</span>');
+      if (s.premelange && !s.flamme) puces.push('<span class="puce chaud">mélange inflammable</span>');
+      if (s.flamme && s.flamme.allumee && !s.flamme.eteinte) puces.push(`<span class="puce chaud">🔥 ${s.flamme.couleur ? 'flamme ' + echapper(s.flamme.couleur.nom.split(' (')[0]) : 'allumée'}</span>`);
+      if (s.flamme && s.flamme.eteinte) puces.push('<span class="puce">flamme éteinte</span>');
       if (s.aimant && !s.libere) puces.push(`<span class="puce">🧲 ${M.formatNombre(s.aimant, 2)} T</span>`);
       if (s.silence && !s.libere) puces.push('<span class="puce ok">silencieux</span>');
       if (s.percoit && !s.lance) puces.push(`<span class="puce ok">perçoit la magie (${s.percoit} m)</span>`);
@@ -264,7 +267,8 @@
     $('res-charge').textContent = n ? fmtS(r.tempsCharge) : '—';
     $('res-puisee').textContent = M.formatEnergie(r.ePuisee);
     $('res-entretien').textContent = M.formatEnergie(r.eEntretien * r.focal / r.rendement);
-    $('res-livree').textContent = r.livraison ? M.formatEnergie(r.livraison.total) : r.etatFinal.soin ? `${M.formatNombre(r.etatFinal.soin, r.etatFinal.soin < 1 ? 1 : 0)} g soignés` : '—';
+    const flFin = r.etatFinal.flammeInfo;
+    $('res-livree').textContent = r.livraison ? M.formatEnergie(r.livraison.total) : flFin ? `${M.formatEnergie(flFin.E)} de flamme` : r.etatFinal.soin ? `${M.formatNombre(r.etatFinal.soin, r.etatFinal.soin < 1 ? 1 : 0)} g soignés` : '—';
     $('res-comparaison').textContent = r.livraison && r.livraison.total > 0
       ? `À l'impact : ${comparer(r.livraison.total)}.`
       : r.ePuisee > 0 ? `Le lanceur puise ${comparer(r.ePuisee)}.` : '';
@@ -350,9 +354,12 @@
     const elec = analyseElec(r);
     const aMatiere = r.etapes.some((e) => e.etat.matiere);
     const btn = (k) => document.querySelector(`.onglets [data-onglet="${k}"]`);
+    const fl = r.etatFinal.flammeInfo || [...r.etapes].reverse().find((e) => e.etat.flammeInfo)?.etat.flammeInfo || null;
     btn('elec').hidden = !elec;
-    let actif = onglet || (elec ? 'elec' : aMatiere ? 'temp' : 'energie');
+    btn('flamme').hidden = !fl;
+    let actif = onglet || (fl ? 'flamme' : elec ? 'elec' : aMatiere ? 'temp' : 'energie');
     if (actif === 'elec' && !elec) actif = aMatiere ? 'temp' : 'energie';
+    if (actif === 'flamme' && !fl) actif = elec ? 'elec' : aMatiere ? 'temp' : 'energie';
     document.querySelectorAll('.onglets [data-onglet]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.onglet === actif)));
     $('elec-stats').innerHTML = '';
     $('courbe-info').textContent = '';
@@ -360,12 +367,96 @@
       $('courbe').innerHTML = '<div class="vide" style="padding:1.2rem;font-size:.85rem">Ajoute des blocs pour voir les courbes du sort.</div>';
       $('courbe-leg').innerHTML = ''; dernierGraph = null; return;
     }
-    if (actif === 'elec') dessinerElec(r, elec);
+    if (actif === 'flamme') dessinerFlamme(r, fl);
+    else if (actif === 'elec') dessinerElec(r, elec);
     else if (actif === 'energie') dessinerEnergie(r);
     else dessinerTemp(r);
   }
 
   const legende = (items) => { $('courbe-leg').innerHTML = items.map(([c, t, pointille]) => `<span><i style="background:${c}${pointille ? ';height:0;border-top:2px dashed ' + c + ';background:none' : ''}"></i>${t}</span>`).join(''); };
+
+  function dessinerFlamme(r, f) {
+    const W = 340, H = 210, sol = 186;
+    const boule = f.mode === 'deflagration';
+    const taille = boule ? f.rayonBoule * 2 : f.hauteur;
+    const echelleM = Math.max(2.2, taille * 1.15);          // hauteur représentée, en mètres
+    const px = (m) => (m / echelleM) * (sol - 14);
+    const c = f.couleur.hex;
+    const cx = 200;
+    const op = f.couleur.invisible ? 0.35 : 1;
+    // silhouette humaine de 1,75 m pour l'échelle
+    const hH = px(1.75), hx = 52;
+    const humain = `<g fill="#3c4361" opacity=".9">
+      <circle cx="${hx}" cy="${sol - hH + hH * 0.065}" r="${hH * 0.065}"/>
+      <rect x="${hx - hH * 0.11}" y="${sol - hH * 0.86}" width="${hH * 0.22}" height="${hH * 0.38}" rx="${hH * 0.05}"/>
+      <rect x="${hx - hH * 0.17}" y="${sol - hH * 0.84}" width="${hH * 0.055}" height="${hH * 0.33}" rx="${hH * 0.027}"/>
+      <rect x="${hx + hH * 0.115}" y="${sol - hH * 0.84}" width="${hH * 0.055}" height="${hH * 0.33}" rx="${hH * 0.027}"/>
+      <rect x="${hx - hH * 0.1}" y="${sol - hH * 0.52}" width="${hH * 0.085}" height="${hH * 0.52}" rx="${hH * 0.03}"/>
+      <rect x="${hx + hH * 0.015}" y="${sol - hH * 0.52}" width="${hH * 0.085}" height="${hH * 0.52}" rx="${hH * 0.03}"/></g>
+      <text x="${hx}" y="${sol - hH - 6}" font-size="8" text-anchor="middle" fill="#6f6d80" ${MONO}>1,75 m</text>`;
+    // graduations
+    const pas = echelleM > 8 ? 2 : echelleM > 4 ? 1 : 0.5;
+    let grad = '';
+    for (let m = pas; m < echelleM; m += pas) grad += `<line x1="96" x2="${W - 6}" y1="${sol - px(m)}" y2="${sol - px(m)}" stroke="#2b3045" stroke-dasharray="2 4"/><text x="${W - 6}" y="${sol - px(m) - 3}" font-size="8" text-anchor="end" fill="#6f6d80" ${MONO}>${M.formatNombre(m, 1)} m</text>`;
+    let dessin;
+    if (boule) {
+      const R = px(f.rayonBoule);
+      dessin = `<defs><radialGradient id="gB" cx="50%" cy="55%" r="50%">
+          <stop offset="0" stop-color="#ffffff" stop-opacity="${0.95 * op}"/><stop offset=".35" stop-color="${c}" stop-opacity="${0.95 * op}"/>
+          <stop offset=".8" stop-color="${c}" stop-opacity="${0.55 * op}"/><stop offset="1" stop-color="${c}" stop-opacity="0"/></radialGradient></defs>
+        <circle class="vacille" cx="${cx}" cy="${sol - R}" r="${R}" fill="url(#gB)"/>
+        <text x="${cx}" y="${Math.max(12, sol - 2 * R - 6)}" font-size="9" text-anchor="middle" fill="${c}" ${MONO}>⌀ ${M.formatNombre(f.rayonBoule * 2, 1)} m</text>`;
+    } else {
+      const Lp = Math.max(6, px(f.hauteur)), base = Math.max(8, Math.min(60, Lp * 0.32));
+      const pre = f.mode === 'premelange';
+      const flammePath = (L, w) => `M${cx - w / 2},${sol} C${cx - w * 0.75},${sol - L * 0.35} ${cx - w * 0.2},${sol - L * 0.62} ${cx},${sol - L} C${cx + w * 0.2},${sol - L * 0.62} ${cx + w * 0.75},${sol - L * 0.35} ${cx + w / 2},${sol} Z`;
+      const bas = pre || f.gaz === 'hydrogene' ? c : '#4f8dff';
+      dessin = `<defs>
+          <linearGradient id="gF" x1="0" y1="1" x2="0" y2="0">
+            <stop offset="0" stop-color="${bas}" stop-opacity="${0.9 * op}"/>
+            <stop offset="${pre ? 0.5 : 0.12}" stop-color="${c}" stop-opacity="${0.95 * op}"/>
+            <stop offset=".75" stop-color="${c}" stop-opacity="${0.7 * op}"/>
+            <stop offset="1" stop-color="${pre ? c : '#c0301a'}" stop-opacity="0"/></linearGradient>
+          <linearGradient id="gC" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#ffffff" stop-opacity="${0.85 * op}"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></linearGradient>
+          <radialGradient id="gH" cx="50%" cy="100%" r="80%"><stop offset="0" stop-color="${c}" stop-opacity="${0.28 * op}"/><stop offset="1" stop-color="${c}" stop-opacity="0"/></radialGradient>
+        </defs>
+        <ellipse cx="${cx}" cy="${sol}" rx="${Math.max(40, base * 2.2)}" ry="${Math.max(16, Lp * 0.5)}" fill="url(#gH)"/>
+        <path class="vacille" d="${flammePath(Lp, base)}" fill="url(#gF)"/>
+        <path class="vacille2" d="${flammePath(Lp * (pre ? 0.45 : 0.55), base * 0.45)}" fill="url(#gC)"/>
+        <text x="${cx + base / 2 + 8}" y="${Math.max(12, sol - Lp + 10)}" font-size="9" fill="${c}" ${MONO}>${M.formatNombre(f.hauteur, 2)} m</text>`;
+    }
+    $('courbe').innerHTML = `<svg class="flamme-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Flamme du sort à l'échelle">
+      ${grad}${humain}${dessin}
+      <line x1="10" x2="${W - 6}" y1="${sol}" y2="${sol}" stroke="#3c4361"/>
+      <text x="${W - 6}" y="${H - 6}" font-size="8" text-anchor="end" fill="#6f6d80" ${MONO}>à l'échelle</text>
+    </svg>`;
+    $('courbe-leg').innerHTML = '';
+    $('courbe-info').innerHTML = `<span class="pastille-couleur" style="background:${c};color:${c}"></span>Flamme ${echapper(f.couleur.nom)}`;
+    const tuile = (lbl, val, alerte = false) => `<div class="chiffre${alerte ? ' alerte' : ''}"><small>${lbl}</small><b>${val}</b></div>`;
+    const g = B.GAZ[f.gaz];
+    const tuiles = [
+      tuile('Température de flamme', `${M.formatNombre(f.T, 0)} °C`),
+      tuile(boule ? 'Puissance (pic)' : 'Puissance', fmtUnite(f.Q, 'W')),
+      tuile('Énergie dégagée', M.formatEnergie(f.E)),
+      tuile(boule ? 'Diamètre de la boule' : 'Hauteur de flamme', `${M.formatNombre(boule ? f.rayonBoule * 2 : f.hauteur, 2)} m`),
+      tuile('Combustible brûlé', `${M.formatNombre(f.brule * 1000, f.brule < 0.01 ? 2 : 0)} g`),
+      tuile('Oxygène consommé', `${M.formatNombre(f.O2 * 1000, 0)} g${f.air ? ` (${M.formatNombre(f.air / 1.2 * 1000, 0)} L d'air)` : ''}`),
+    ];
+    if (boule) {
+      tuiles.push(tuile('Durée de la combustion', '≈ 50 ms'));
+      tuiles.push(tuile('Pression', f.pression > 1.05 ? `${M.formatNombre(f.pression, 1)} atm` : 'à l\'air libre'));
+    } else {
+      tuiles.push(tuile('Durée', fmtS(f.duree)));
+      const danger5 = Math.sqrt((f.chi * f.Q) / (4 * Math.PI * 5000));
+      tuiles.push(tuile('Douloureux en ~10 s jusqu\'à', `${M.formatNombre(danger5, danger5 < 10 ? 1 : 0)} m`));
+      if (f.rLanceur) tuiles.push(tuile(`Rayonnement à ${M.formatNombre(f.rLanceur, 1)} m (ton visage)`, `${M.formatNombre(f.q, 1)} kW/m²`, f.q > 5 && (r.etatFinal.protection || 0) < f.T));
+      tuiles.push(tuile('Part rayonnée', `${Math.round(f.chi * 100)} %`));
+    }
+    const comb = B.COMBURANTS[f.comburant]?.nom.toLowerCase() || 'air ambiant';
+    tuiles.push(`<p class="note">${echapper(g?.nom || f.gaz)} · ${f.mode === 'diffusion' ? 'flamme de diffusion dans l\'air ambiant' : f.mode === 'premelange' ? `prémélange avec ${comb}, richesse ${M.formatNombre(f.phi, 1)}` : `déflagration d'un prémélange avec ${comb}`}. Températures adiabatiques réelles (diffusion : ×0,75 pour le mélange imparfait et le rayonnement), hauteur de flamme de Heskestad, rayonnement en source ponctuelle q = χ·P/4πr². Repères : 1 kW/m² = soleil d'été, 5 kW/m² = douleur en ~10 s, 12,5 kW/m² = le bois s'enflamme.</p>`);
+    $('elec-stats').innerHTML = tuiles.join('');
+    dernierGraph = null;
+  }
 
   function dessinerTemp(r) {
     const W = 340, H = 170, g = 34, d = 10, h = 8, b = 22;
